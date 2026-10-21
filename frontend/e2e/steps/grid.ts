@@ -149,7 +149,8 @@ Step('沒有無效指令提示', async ({ world }) => {
 })
 
 Step(/^可視化區(為|不是)半透明$/, async ({ world }, state: string) => {
-  const stage = grid(world).locator('.grid-stage')
+  // GridWorld 與 TimelineView 各自的繪圖區
+  const stage = world.visual().locator('.grid-stage, .timeline-view .tl-stage')
   if (state === '為') await expect.poll(() => stage.evaluate((el) => Number(getComputedStyle(el).opacity))).toBeLessThan(1)
   else {
     await world.waitIdle()

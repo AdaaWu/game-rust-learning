@@ -248,7 +248,7 @@ Step(/^編輯器第 ([0-9]+) 行整行有 error 等級的紅色波浪線 marker$
   await expectMarker(world, 'error', [l, 1, l, max])
 })
 
-Step('編輯器沒有 error 等級的 marker', async ({ world }) => {
+Step(/^編輯器沒有(?:任何)? error 等級的 marker$/, async ({ world }) => {
   await world.waitIdle()
   expect((await world.markers()).filter((m) => m.severity === 8)).toEqual([])
 })

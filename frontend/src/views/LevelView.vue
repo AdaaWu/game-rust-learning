@@ -9,6 +9,7 @@ import Ferris from '../components/Ferris.vue'
 import GridWorld from '../components/GridWorld.vue'
 import LevelCompleteDialog from '../components/LevelCompleteDialog.vue'
 import MemoryView from '../components/MemoryView.vue'
+import TimelineView from '../components/TimelineView.vue'
 import ShortcutHelp from '../components/ShortcutHelp.vue'
 import { isMacPlatform, matchShortcut } from '../domain/editor/shortcuts'
 import { levelNumber } from '../domain/levelNumber'
@@ -186,6 +187,15 @@ const submitLabel = computed(() => {
 const gridStdout = computed(() => (attempt.phase === 'running' ? null : (attempt.lastRun?.execution?.stdout ?? null)))
 const gridStatus = computed(() => (attempt.phase === 'running' ? null : (attempt.lastRun?.status ?? null)))
 const gridTruncated = computed(() => attempt.lastRun?.execution?.stdout_truncated ?? false)
+
+// 每次新的 Run 結果重新掛載時間軸，相同結果也從第 1 步重播；請求失敗不換
+const timelineKey = ref(0)
+watch(
+  () => attempt.result,
+  (result) => {
+    if (result?.action === 'run' && 'data' in result) timelineKey.value++
+  },
+)
 
 const codeModified = computed(() => !!level.value && code.value !== level.value.starter)
 
@@ -409,6 +419,17 @@ onBeforeUnmount(() => {
             :code-modified="codeModified"
             @line-change="highlightLine = $event"
           />
+          <div v-else-if="level.visual === 'timeline'" class="visual-timeline">
+            <p v-if="edited && attempt.lastRun" class="visual-stale-note">程式碼已修改，行號高亮僅供參考</p>
+            <TimelineView
+              :key="timelineKey"
+              :stdout="gridStdout"
+              :status="gridStatus"
+              :truncated="gridTruncated"
+              :pending="loading"
+              @line-change="highlightLine = $event"
+            />
+          </div>
         </div>
         <div class="console-panel-wrap panel">
           <ConsolePanel
@@ -418,6 +439,7 @@ onBeforeUnmount(() => {
             :stale="edited"
             :stale-request="attempt.codeChangedDuringRequest"
             :mark-grid-commands="level.visual === 'grid'"
+            :hide-timeline-events="level.visual === 'timeline'"
             @jump="onJump"
           />
         </div>
@@ -722,6 +744,22 @@ onBeforeUnmount(() => {
 .visual-panel {
   flex: 55 1 0;
   min-height: 0;
+}
+.visual-timeline {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+}
+.visual-stale-note {
+  margin: 0;
+  padding: 6px 12px;
+  border-bottom: var(--border-w) solid var(--border);
+  background: color-mix(in srgb, var(--warning) 12%, var(--surface));
+  color: var(--warning);
+  font-size: 13px;
+  font-weight: 700;
 }
 .console-panel-wrap {
   flex: 45 1 0;

@@ -8,6 +8,8 @@ defineProps<{
   total: number
   playing: boolean
   min: number
+  // 整列停用：三顆按鈕與進度條
+  disabled?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -31,17 +33,18 @@ function onSeek(event: Event) {
 <template>
   <div class="playback-bar">
     <div class="playback-buttons">
-      <button type="button" class="pb-btn" aria-label="從頭" title="從頭" @click="emit('rewind')">⏮</button>
+      <button type="button" class="pb-btn" aria-label="從頭" title="從頭" :disabled="disabled" @click="emit('rewind')">⏮</button>
       <button
         type="button"
         class="pb-btn is-main"
         :aria-label="playing ? '暫停' : '播放'"
         :title="playing ? '暫停' : '播放'"
+        :disabled="disabled"
         @click="emit('toggle')"
       >
         {{ playing ? '⏸' : '▶' }}
       </button>
-      <button type="button" class="pb-btn" aria-label="單步前進" title="單步前進" @click="emit('step-forward')">⏭</button>
+      <button type="button" class="pb-btn" aria-label="單步前進" title="單步前進" :disabled="disabled" @click="emit('step-forward')">⏭</button>
       <label class="pb-speed">
         <span>速度</span>
         <select aria-label="速度" :value="String(playback.speed)" @change="onSpeed">
@@ -56,7 +59,7 @@ function onSeek(event: Event) {
         :min="min"
         :max="total"
         :value="step"
-        :disabled="total <= min"
+        :disabled="disabled || total <= min"
         @input="onSeek"
       />
       <span class="pb-label" data-testid="step-label">第 {{ step }} / {{ total }} 步</span>
@@ -92,7 +95,11 @@ function onSeek(event: Event) {
   border-color: var(--brand);
   color: var(--brand-contrast);
 }
-.pb-btn:hover {
+.pb-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.pb-btn:not(:disabled):hover {
   transform: translateY(-1px);
 }
 .pb-speed {

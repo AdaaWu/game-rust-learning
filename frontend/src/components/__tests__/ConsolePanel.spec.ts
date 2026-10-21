@@ -5,6 +5,7 @@ import ConsolePanel from '../ConsolePanel.vue'
 import type { ConsoleResult } from '../../domain/console'
 import type { RunResponse, SubmitResponse, TestResult } from '../../api/types'
 import { diag, runCompileError, runOk, submitResult } from '../../test/fixtures'
+import { stackOverflowStderr, tl31Starter, tl33Starter } from '../../test/timelineFixtures'
 
 type Props = {
   result: ConsoleResult | null
@@ -13,11 +14,21 @@ type Props = {
   stale: boolean
   staleRequest: boolean
   markGridCommands: boolean
+  hideTimelineEvents: boolean
 }
 
 function mountConsole(props: Partial<Props> = {}) {
   return mount(ConsolePanel, {
-    props: { result: null, loading: false, slow: false, stale: false, staleRequest: false, markGridCommands: false, ...props },
+    props: {
+      result: null,
+      loading: false,
+      slow: false,
+      stale: false,
+      staleRequest: false,
+      markGridCommands: false,
+      hideTimelineEvents: false,
+      ...props,
+    },
   })
 }
 
@@ -431,6 +442,111 @@ describe('F6/F7 ConsolePanel', () => {
     it('請求期間改過程式碼：頂部顯示「這是修改前那份程式碼的結果」', () => {
       const w = mountConsole({ result: run(runOk('x\n')), staleRequest: true })
       expect(w.text()).toContain('這是修改前那份程式碼的結果')
+    })
+  })
+  describe('S2-3 timeline 關卡隱藏 @tl| 行（ux §11.8）', () => {
+    const lines = (w: VueWrapper) => w.findAll('[data-testid="stdout-line"]').map((l) => l.element.textContent)
+    const hiddenNote = (w: VueWrapper) => w.find('[data-testid="tl-hidden-note"]')
+
+    it('輸出分頁只顯示一般輸出，頂部小字「已隱藏 n 行時間軸事件」', () => {
+      const w = mountConsole({ result: run(runOk(tl31Starter)), hideTimelineEvents: true })
+      expect(lines(w)).toEqual(['總共 0 顆寶石'])
+      expect(hiddenNote(w).exists()).toBe(true)
+      expect(hiddenNote(w).text()).toBe('已隱藏 21 行時間軸事件')
+    })
+
+    it('timeout：卡片上方只留玩家自己的輸出（33 starter）', () => {
+      const w = mountConsole({ result: run(terminated('timeout', tl33Starter)), hideTimelineEvents: true })
+      expect(lines(w)).toEqual(['分身 2 回報完畢，讓出 0 座窄橋', '分身 1 站上窄橋 1', '分身 0 站上窄橋 0'])
+      expect(hiddenNote(w).text()).toBe('已隱藏 14 行時間軸事件')
+      expect(w.get('[data-testid="status-card"]').text()).toContain('程式跑太久被停下來了（超過 5 秒）')
+    })
+
+    it('只隱藏第 1 欄就是 @tl| 的行；行首有空白的照常顯示', () => {
+      const w = mountConsole({ result: run(runOk('@tl|start|1|甲|\n  @tl|假的\n說明 @tl|x\n')), hideTimelineEvents: true })
+      expect(lines(w)).toEqual(['  @tl|假的', '說明 @tl|x'])
+      expect(hiddenNote(w).text()).toBe('已隱藏 1 行時間軸事件')
+    })
+
+    it('格式不對的 @tl| 行也隱藏', () => {
+      const w = mountConsole({ result: run(runOk('@tl|jump|1|甲|x\nhi\n')), hideTimelineEvents: true })
+      expect(lines(w)).toEqual(['hi'])
+      expect(hiddenNote(w).text()).toBe('已隱藏 1 行時間軸事件')
+    })
+
+    it('全部都是事件行：不顯示輸出區塊，只有隱藏小字', () => {
+      const w = mountConsole({ result: run(runOk('@tl|start|1|甲|\n@tl|end||甲|\n')), hideTimelineEvents: true })
+      expect(lines(w)).toEqual([])
+      expect(hiddenNote(w).text()).toBe('已隱藏 2 行時間軸事件')
+    })
+
+    it('沒有事件行時不顯示隱藏小字', () => {
+      const w = mountConsole({ result: run(runOk('總共 15 顆寶石\n')), hideTimelineEvents: true })
+      expect(lines(w)).toEqual(['總共 15 顆寶石'])
+      expect(hiddenNote(w).exists()).toBe(false)
+    })
+
+    it('非 timeline 關卡照原樣顯示 @tl| 行', () => {
+      const w = mountConsole({ result: run(runOk('@tl|start|1|甲|\nhi\n')), hideTimelineEvents: false })
+      expect(lines(w)).toEqual(['@tl|start|1|甲|', 'hi'])
+      expect(hiddenNote(w).exists()).toBe(false)
+    })
+  })
+
+  describe('S2-3 測試程式中途當掉（ux §3.3）', () => {
+    const crashed = (tests: TestResult[], stderr: string): SubmitResponse =>
+      submitResult('test_failed', tests, {
+        execution: {
+          exit_code: 134,
+          stdout: '\nrunning 3 tests\ntest a_short_echo ... ok\ntest zz_deep_echo ... ',
+          stderr,
+          timed_out: false,
+          stdout_truncated: false,
+          stderr_truncated: false,
+        },
+      })
+    const abortedTests: TestResult[] = [
+      { name: 'a_short_echo', status: 'passed', message: null },
+      { name: 'zz_deep_echo', status: 'not_run', message: null },
+      { name: 'zz_zz_after', status: 'not_run', message: null },
+    ]
+    const crashCard = (w: VueWrapper) => w.find('[data-testid="test-crash-card"]')
+
+    it('沒有 failed、有 not_run、stderr 非空：測試結果分頁頂部紅色卡片＋stderr 原文', () => {
+      const w = mountConsole({ result: submit(crashed(abortedTests, stackOverflowStderr)) })
+      expect(selectedTab(w)).toBe('tests')
+      const card = crashCard(w)
+      expect(card.exists()).toBe(true)
+      expect(card.classes()).toContain('is-danger')
+      expect(card.text()).toContain('測試程式在執行途中整個當掉了，後面的測試沒有機會跑')
+      expect(card.get('pre').text()).toBe(stackOverflowStderr.trim())
+    })
+
+    it('卡片在測試列之前，且不自動展開任何測試列', () => {
+      const w = mountConsole({ result: submit(crashed(abortedTests, stackOverflowStderr)) })
+      const card = crashCard(w)
+      expect(card.exists()).toBe(true)
+      const firstRow = w.get('[data-testid="test-row"]')
+      expect(card.element.compareDocumentPosition(firstRow.element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      expect(w.findAll('[data-testid="test-row"]').map((r) => r.attributes('data-expanded'))).toEqual(['false', 'false', 'false'])
+    })
+
+    it('有 failed 測試時不顯示當掉卡片', () => {
+      const tests: TestResult[] = [{ name: 'a', status: 'failed', message: 'x' }, ...abortedTests.slice(1)]
+      expect(crashCard(mountConsole({ result: submit(crashed(tests, stackOverflowStderr)) })).exists()).toBe(false)
+    })
+
+    it('stderr 為空時不顯示當掉卡片', () => {
+      expect(crashCard(mountConsole({ result: submit(crashed(abortedTests, '')) })).exists()).toBe(false)
+    })
+
+    it('沒有 not_run 時不顯示當掉卡片', () => {
+      const tests: TestResult[] = [{ name: 'a_short_echo', status: 'passed', message: null }]
+      expect(crashCard(mountConsole({ result: submit(crashed(tests, stackOverflowStderr)) })).exists()).toBe(false)
+    })
+
+    it('execution = null 時不顯示當掉卡片', () => {
+      expect(crashCard(mountConsole({ result: submit(submitResult('test_failed', abortedTests)) })).exists()).toBe(false)
     })
   })
 })

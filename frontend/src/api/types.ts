@@ -1,7 +1,7 @@
 // 對照 api.md §6
 
 export type LevelKind = 'build' | 'fix-compile' | 'debug'
-export type LevelVisual = 'grid' | 'memory' | 'none'
+export type LevelVisual = 'grid' | 'memory' | 'timeline' | 'none'
 
 export interface ChapterSummary {
   chapter: number

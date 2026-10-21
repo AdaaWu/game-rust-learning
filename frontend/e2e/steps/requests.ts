@@ -39,8 +39,8 @@ Step(/^mock API 的 (Run|Submit) (?:延遲 ([0-9]+) 秒後)?回「(.+)」範例$
   setReplies(mock, kind, [ok(apiExample(kind as Kind, name))], delay)
 })
 
-Step(/^mock API 的 Run 回應：$/, async ({ mock }, doc: string) => {
-  setReplies(mock, 'Run', [ok(JSON.parse(doc))])
+Step(/^mock API 的 (Run|Submit) 回應：$/, async ({ mock }, kind: string, doc: string) => {
+  setReplies(mock, kind, [ok(JSON.parse(doc))])
 })
 
 // ---------- compile_error ----------
@@ -164,7 +164,7 @@ Step(/^mock API 的 GET "\/api\/levels\/([^"]+)" 回 404，error\.code 為 "(\w+
   mock.detailOverrides.set(id, errorReply(404, code))
 })
 
-Step(/^mock API 的 (Run|Submit) 回 (\d{3})，(.+)$/, async ({ mock }, kind: string, status: string, rest: string) => {
+Step(/^mock API 的 (Run|Submit) (?:改為)?回 (\d{3})，(.+)$/, async ({ mock }, kind: string, status: string, rest: string) => {
   const code = /error\.code 為 "(\w+)"/.exec(rest)?.[1]
   const retry = /標頭 "Retry-After" 為 "([^"]*)"/.exec(rest)?.[1]
   const text = /body 為純文字 "([^"]*)"/.exec(rest)?.[1]
@@ -177,7 +177,7 @@ Step(/^mock API 的 (Run|Submit) 回 (\d{3})，(.+)$/, async ({ mock }, kind: st
   setReplies(mock, kind, [reply])
 })
 
-Step(/^mock API 的 (Run|Submit) 連線中斷$/, async ({ mock }, kind: string) => {
+Step(/^mock API 的 (Run|Submit) (?:改為)?連線中斷$/, async ({ mock }, kind: string) => {
   setReplies(mock, kind, [{ status: 0, abort: true }])
 })
 

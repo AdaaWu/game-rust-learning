@@ -358,6 +358,42 @@ Step('該列沒有「實際（left）」「預期（right）」欄', async ({ wo
   await expect(row.getByTestId('assert-expected')).toHaveCount(0)
 })
 
+// ---------- 測試程式中途當掉 ----------
+
+function testsPanel(world: World) {
+  return world.console().locator('[role=tabpanel]').nth(2)
+}
+
+Step(/^「測試結果」分頁頂部顯示紅色卡片「(.+)」$/, async ({ world }, title: string) => {
+  await world.waitIdle()
+  const c = testsPanel(world).getByTestId('test-crash-card')
+  await expect(c.locator('strong')).toHaveText(title)
+  await expect(c).toHaveClass(/is-danger/)
+  const first = await testsPanel(world).evaluate((el) => (el.firstElementChild as HTMLElement | null)?.dataset.testid)
+  expect(first).toBe('test-crash-card')
+})
+
+Step(/^該卡片以等寬字型顯示 stderr 原文，含 "(.+)" 與 "(.+)"$/, async ({ world, mock }, a: string, b: string) => {
+  const pre = testsPanel(world).getByTestId('test-crash-card').locator('pre')
+  expect((await pre.textContent())?.trim()).toBe(mock.submitReplies[0].json.execution.stderr.trim())
+  await expect(pre).toContainText(a)
+  await expect(pre).toContainText(b)
+  expect(await pre.evaluate((el) => getComputedStyle(el).fontFamily)).toMatch(/mono/i)
+})
+
+Step('沒有任何測試列展開', async ({ world }) => {
+  const rows = world.console().getByTestId('test-row')
+  expect(await rows.count()).toBeGreaterThan(0)
+  for (const row of await rows.all()) await expect(row).toHaveAttribute('data-expanded', 'false')
+  await expect(world.console().locator('.test-detail')).toHaveCount(0)
+})
+
+Step(/^「測試結果」分頁沒有「(.+)」卡片$/, async ({ world }, title: string) => {
+  await world.waitIdle()
+  await expect(testsPanel(world).getByText(title)).toHaveCount(0)
+  await expect(testsPanel(world).getByTestId('test-crash-card')).toHaveCount(0)
+})
+
 Step(/^"([^"]+)" 那一列顯示「(.)」圖示與文字「(.+)」，為灰色$/, async ({ world }, name: string, icon: string, text: string) => {
   const row = world.testRow(name)
   await expect(row.locator('.test-icon')).toHaveText(icon)
