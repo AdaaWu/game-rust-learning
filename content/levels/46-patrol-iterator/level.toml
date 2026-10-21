@@ -1,0 +1,56 @@
+id = "46-patrol-iterator"
+chapter = 11
+order = 46
+title = "巡邏隊的節拍器"
+kind = "build"
+visual = "grid"
+
+story = """
+塔頂的門一打開，眼前是一座迷宮，牆上刻滿各種 trait 的名字。
+守門的老龍蝦說：只有遵守契約的夥伴，才走得出這裡。
+迷宮裡的巡邏隊踩著「右、右、下」的節拍永遠不停，我只要跟著走前 9 拍。
+可是節拍器還沒做好，得先教它怎麼一拍一拍地數。
+"""
+
+concept = """
+## 關聯型別（associated type）
+
+- `trait Iterator { type Item; fn next(&mut self) -> Option<Self::Item>; }`
+- `type Item = Offset;`：實作的人決定「每次吐出什麼型別」
+- 和泛型參數的差別
+  - 泛型 `trait From<T>`：同一個型別可以實作很多次（`From<u8>`、`From<i32>`…）
+  - 關聯型別：一個型別**只有一種** `Item`，呼叫端不必再寫型別標註，`patrol.next()` 一定是 `Option<Offset>`
+- 取捨：要「一個型別多種組合」用泛型參數；要「型別決定唯一答案」用關聯型別
+
+## 運算子多載：`impl Add<Offset> for Pos`
+
+- `p + o` 其實是 `Add::add(p, o)`
+- `Add<Rhs>` 的 `Rhs` 是泛型參數（右邊可以是不同型別），`type Output` 是關聯型別（相加的結果只有一種）
+- 本關 `Pos + Offset = Pos`：位置加位移還是位置；`Pos + Pos` 沒有意義，就不要實作
+
+## 只寫 next，免費拿到一整套
+
+- 實作 `next` 之後，`take`、`map`、`zip`、`nth`、`collect` 全部是 `Iterator` 的**預設方法**
+- `waypoints` 用 `patrol.take(n)` 只拿前 n 拍
+
+## 無限 iterator 與惰性
+
+- 巡邏隊**永遠不停**：`next` 一直回 `Some`，只有空節拍回 `None`
+- iterator 是**惰性**（lazy）的：要一拍才算一拍，不會先把所有節拍算好放進記憶體
+- 對無限 iterator 直接 `collect()` 會永遠跑下去；一定要先 `take(n)`
+- 取捨：預先展開成 `Vec` 再 `into_iter()` 寫起來簡單，但只能展開有限長度，還要先付記憶體
+"""
+
+hints = [
+  "next 被呼叫第 k 次時，應該回傳 pattern 的哪一格？超過長度之後要怎麼繞回開頭？",
+  "next 需要記住「現在第幾拍」：Patrol 要多一個什麼欄位？拍數超過 pattern 長度時，哪個運算子能讓它繞回開頭？pattern 是空的時候該回傳什麼？",
+  "waypoints 只走 n 拍：Iterator 有哪個方法只取前 n 個？每拍把位移加到目前位置之後，要把哪個值存起來？Add 裡的 x、y 各自要和位移的哪個欄位相加？",
+]
+
+[grid]
+width  = 7
+height = 4
+start  = [0, 0]
+goal   = [6, 3]
+walls  = [[3, 0], [0, 1], [1, 1], [5, 1], [1, 2], [2, 2], [3, 3], [4, 3]]
+gems   = [[2, 1], [5, 2]]

@@ -153,6 +153,7 @@ async fn list_levels_sorted_by_chapter_then_order_with_summary_fields() {
             { "id": "09-late-grid", "chapter": 1, "order": 9, "title": "開門撿寶", "kind": "fix-compile", "visual": "grid" },
             { "id": "02-plain-sum", "chapter": 2, "order": 2, "title": "數貝殼", "kind": "debug", "visual": "none" },
             { "id": "03-move-memory", "chapter": 3, "order": 3, "title": "交出去的背包", "kind": "fix-compile", "visual": "memory" },
+            { "id": "04-bridge-timeline", "chapter": 3, "order": 4, "title": "兩座窄橋", "kind": "debug", "visual": "timeline" },
         ])
     );
     assert_eq!(sorted_keys(&v), vec!["chapters", "levels"]);
@@ -263,12 +264,38 @@ async fn level_detail_none_visual_has_null_grid_and_snapshots() {
 }
 
 #[tokio::test]
+async fn level_detail_timeline_level_returns_starter_with_helper() {
+    let (status, _, body) = send(default_app(), get("/api/levels/04-bridge-timeline")).await;
+    assert_eq!(status, StatusCode::OK);
+    let starter = common::read_fixture("content/levels/04-bridge-timeline/starter.rs");
+    let helper = common::read_fixture("content/shared/timeline.rs");
+    assert_eq!(
+        as_json(&body),
+        json!({
+            "id": "04-bridge-timeline",
+            "chapter": 3,
+            "order": 4,
+            "title": "兩座窄橋",
+            "kind": "debug",
+            "visual": "timeline",
+            "story": "兩隻分身要一起過兩座窄橋。",
+            "concept": "## 鎖的順序\n\n- 每條執行緒依同一順序上鎖",
+            "hints": ["看時間軸誰在等誰"],
+            "starter": format!("{starter}\n{helper}"),
+            "grid": null,
+            "memory_snapshots": null
+        })
+    );
+}
+
+#[tokio::test]
 async fn level_detail_has_exact_keys_and_no_solution_or_tests() {
     for id in [
         "01-walk-grid",
         "09-late-grid",
         "02-plain-sum",
         "03-move-memory",
+        "04-bridge-timeline",
     ] {
         let (status, _, body) = send(default_app(), get(&format!("/api/levels/{id}"))).await;
         assert_eq!(status, StatusCode::OK, "{id}");

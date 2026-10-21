@@ -8,7 +8,7 @@ Feature: 判題服務滿載與不可用
   Docker 不可用時回 503 JUDGE_UNAVAILABLE；關卡瀏覽不受影響，健康檢查回報降級
 
   Background:
-    Given 後端以 content/ 全部 33 關的關卡內容啟動
+    Given 後端以 content/ 全部 67 關的關卡內容啟動
 
   # ---------- 滿載 503 JUDGE_BUSY ----------
 
@@ -115,7 +115,7 @@ Feature: 判題服務滿載與不可用
     Given 判題設定的 docker_bin 為不存在的路徑 "/nonexistent/docker"
     When 送出 GET "/api/levels"
     Then 回應狀態碼為 200
-    And 回應 JSON 的 "levels" 長度為 33
+    And 回應 JSON 的 "levels" 長度為 67
     When 送出 GET "/api/levels/01-hello-ferris"
     Then 回應狀態碼為 200
 

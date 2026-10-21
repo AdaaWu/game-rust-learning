@@ -1,0 +1,61 @@
+id = "48-mixed-squad"
+chapter = 11
+order = 48
+title = "混編小隊"
+kind = "fix-compile"
+visual = "grid"
+
+story = """
+迷宮中段的通道太長，我找來海鷗和寄居蟹組成接力小隊。
+三種夥伴步伐不同，我想把大家排進同一個 `Vec<Box<dyn Walker>>`。
+編譯器卻說 `Walker` 不能當成 `dyn` 用，問題出在那個會改寫步伐的 `steps_with`。
+我得在兩種修法之間挑一種，讓小隊和隊長探路都能出發。
+"""
+
+concept = """
+## 泛型 vs trait object：兩種多型
+
+- 泛型 `fn lead<W: Walker>(w: &W)`：**單型化**，每個實際型別各產生一份程式碼
+  - 靜態分派、可 inline，熱路徑最快
+  - 代價：一個 `Vec<W>` 只能裝同一種型別；型別多時執行檔變大
+- `Box<dyn Walker>`：胖指標（資料位址 + vtable 位址），執行期查表呼叫
+  - 不同型別可以混裝在同一個 `Vec`
+  - 代價：多一次間接跳躍、通常無法 inline、`Box` 要配置 heap
+
+## dyn compatible（dyn 相容）
+
+- vtable 要在編譯時列出「每個方法的一個位址」
+- 泛型方法 `fn steps_with<F: Fn(&str) -> String>` 對每種 `F` 都會產生一份，**沒辦法只放一個位址** → trait 不 dyn compatible → **E0038**
+- 同理：回傳 `Self`、參數用 `Self` 的方法也不行（vtable 不知道 `Self` 多大）
+
+## 修法一：`where Self: Sized`
+
+- 在 `steps_with` 加 `where Self: Sized`：這個方法**不進 vtable**，只有具體型別能呼叫
+- `dyn Walker` 本身大小未知（不是 `Sized`），所以透過 `Box<dyn Walker>` 呼叫不到 `steps_with`
+- 取捨：泛型 `F` 照樣單型化、可 inline；但混編隊伍裡的夥伴不能用這個方法
+
+## 修法二：參數改成 `&dyn Fn(&str) -> String`
+
+- 方法本身不再是泛型，可以進 vtable，`Box<dyn Walker>` 也能呼叫
+- 取捨：呼叫 `f` 變成動態分派，每一步多一次查表；呼叫端要傳 `&closure`
+
+## 怎麼選
+
+- 方法只在熱路徑、具體型別上用 → 修法一
+- 混編隊伍裡也需要這個方法 → 修法二
+- 本關 `relay` 只用 `name`、`steps`，兩種修法都能過關
+"""
+
+hints = [
+  "E0038 說 Walker 不 dyn compatible，並指出是哪一個方法造成的：那個方法和其他方法差在哪裡？",
+  "vtable 每個方法只能放一個位址，可是 steps_with 對每種 F 都會產生一份。要嘛讓它不進 vtable，要嘛讓它不再是泛型",
+  "在 steps_with 的簽名後面加 where Self: Sized；或把參數改成 f: &dyn Fn(&str) -> String",
+]
+
+[grid]
+width  = 7
+height = 3
+start  = [0, 0]
+goal   = [6, 2]
+walls  = [[4, 0], [5, 0], [1, 1], [2, 1], [6, 1], [0, 2], [1, 2], [2, 2], [4, 2]]
+gems   = [[0, 1], [3, 1], [5, 2]]

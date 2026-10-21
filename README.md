@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/AdaaWu/game-rust-learning/actions/workflows/ci.yml/badge.svg)](https://github.com/AdaaWu/game-rust-learning/actions/workflows/ci.yml)
 
-Vue 3 + Axum 的 Rust 學習闖關網頁：規劃 53 關，目前 33 關／8 章。類 Codecademy 的線上編輯器，搭配 Ferris 地圖、記憶體可視化與 debug 關卡，判題在 Docker 沙箱內執行。
+Vue 3 + Axum 的 Rust 學習闖關網頁：共 13 章，依章節逐關進行。類 Codecademy 的線上編輯器，搭配 Ferris 地圖、記憶體與並行時間軸可視化、debug 關卡，判題在 Docker 沙箱內執行。
 
 ## 快速開始
 

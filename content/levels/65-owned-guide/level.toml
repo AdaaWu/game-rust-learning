@@ -1,0 +1,210 @@
+id = "65-owned-guide"
+chapter = 13
+order = 65
+title = "過期的導遊卷軸"
+kind = "debug"
+visual = "memory"
+
+story = """
+第六道試煉要出海：我在碼頭領了一份導遊卷軸，上面抄著「碼頭 → 珊瑚礁 → 古碑」。
+剛要出發，碼頭貼出公告：珊瑚礁蓋了堤防，航道改走燈塔灣，連航道圖都更新了。
+可是我照著卷軸划，還是一路衝向珊瑚礁，砰的一聲撞上新蓋的堤防。
+程式沒有 panic，卷軸和航道圖各說各話，到底哪一份才是真的？
+"""
+
+concept = """
+## 擁有一份複本 vs 借用原資料
+
+- `Guide { notes: String }` 建立時用 `to_string()` **複製**一份航道：卷軸擁有自己的資料
+- 之後原本的航道改了，卷軸手上的複本**不會跟著變**：這是「快照」，不是「視窗」
+- 記憶體圖上看得到：原航道和卷軸內容是**兩塊不同的 heap**
+
+## 改成借用：struct 帶生命週期（複習第 16 關）
+
+- `struct Guide<'a> { notes: &'a str }`：卷軸不擁有航道，只是借來看
+- `'a` 表示「Guide 活著的期間，被借的航道也必須活著，而且不能被改」
+- `impl<'a> Guide<'a>`、`fn new(notes: &'a str) -> Guide<'a>`：生命週期要寫進 impl 與建構函式
+
+## 借用規則逼你調整順序
+
+- 改成借用後，原本的順序「先領卷軸、再改航道、再看卷軸」**編譯不過**：卷軸還在借，航道不能被 `&mut` 修改
+- 這正是編譯器在說：「你要看的應該是最新的航道」
+- 所以要**先 `build_dike`，再建立 Guide**：需要時才借用
+
+## 選擇與取捨
+
+- **擁有複本**（`String`）：Guide 可以活得比原資料久、可以跨執行緒搬走；代價是資料會過期、多一次配置
+- **借用**（`&'a str`）：永遠看到原資料、不用複製；代價是 Guide 受原資料生命週期限制，借用期間原資料不能改
+- 原則：資料「會更新、要看最新」用借用；「要保留當下狀態」才用複本
+
+## Debug 心法
+
+- D3 等級：沒有 panic，看**記憶體圖**裡兩塊 heap 的內容是否一致
+- 問自己：這份資料是「我的」還是「借來的」？它會不會在我不知道的時候被改？
+"""
+
+hints = [
+  "播放記憶體圖：航道 chart 和卷軸 guide 指向同一塊 heap 嗎？build_dike 之後兩邊的內容一樣嗎？",
+  "Guide::new 用 to_string 抄了一份航道，之後原航道再怎麼改，卷軸都看不到",
+  "讓 Guide 借用航道（struct 加上生命週期、存 &str），再把 build_dike 移到建立 Guide 之前，編譯器會告訴你為什麼",
+]
+
+[[memory_snapshots]]
+line = 38
+note = "main 畫好航道「碼頭 → 珊瑚礁 → 古碑」，準備出航"
+heap = [
+  { id = "h1", type = "String", value = "\"碼頭 → 珊瑚礁 → 古碑\"", state = "live" },
+]
+pointers = [
+  { from = "main.chart", to = "h1", kind = "own" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.chart", name = "chart", type = "String", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 25
+note = "`Guide::new` 用 `to_string()` 把航道**抄一份**：卷軸的 `notes` 是另一塊 heap"
+heap = [
+  { id = "h1", type = "String", value = "\"碼頭 → 珊瑚礁 → 古碑\"", state = "live" },
+  { id = "h2", type = "String（卷軸的複本）", value = "\"碼頭 → 珊瑚礁 → 古碑\"", state = "live" },
+]
+pointers = [
+  { from = "main.chart", to = "h1", kind = "own" },
+  { from = "voyage.chart", to = "main.chart", kind = "mut" },
+  { from = "voyage.guide", to = "h2", kind = "own" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.chart", name = "chart", type = "String", state = "live" },
+]
+
+[[memory_snapshots.frames]]
+id = "voyage"
+fn = "voyage"
+vars = [
+  { id = "voyage.chart", name = "chart", type = "&mut String", state = "live" },
+  { id = "voyage.guide", name = "guide", type = "Guide", value = "Guide { notes: String }", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 26
+note = "碼頭公告：航道改走燈塔灣，`h1` 換成新內容；卷軸的複本 `h2` 完全不知道"
+heap = [
+  { id = "h1", type = "String", value = "\"碼頭 → 燈塔灣 → 古碑\"", state = "live" },
+  { id = "h2", type = "String（卷軸的複本）", value = "\"碼頭 → 珊瑚礁 → 古碑\"", state = "live" },
+]
+pointers = [
+  { from = "main.chart", to = "h1", kind = "own" },
+  { from = "voyage.chart", to = "main.chart", kind = "mut" },
+  { from = "voyage.guide", to = "h2", kind = "own" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.chart", name = "chart", type = "String", state = "live" },
+]
+
+[[memory_snapshots.frames]]
+id = "voyage"
+fn = "voyage"
+vars = [
+  { id = "voyage.chart", name = "chart", type = "&mut String", state = "live" },
+  { id = "voyage.guide", name = "guide", type = "Guide", value = "Guide { notes: String }", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 29
+note = "照卷軸報第 2 站：`stop` 指向過期的複本，報出「珊瑚礁」；Ferris 衝向新蓋的堤防，沒有任何錯誤訊息"
+error = { target = "h2" }
+heap = [
+  { id = "h1", type = "String", value = "\"碼頭 → 燈塔灣 → 古碑\"", state = "live" },
+  { id = "h2", type = "String（卷軸的複本）", value = "\"碼頭 → 珊瑚礁 → 古碑\"", state = "live" },
+]
+pointers = [
+  { from = "main.chart", to = "h1", kind = "own" },
+  { from = "voyage.chart", to = "main.chart", kind = "mut" },
+  { from = "voyage.guide", to = "h2", kind = "own" },
+  { from = "voyage.stop", to = "h2", kind = "shared" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.chart", name = "chart", type = "String", state = "live" },
+]
+
+[[memory_snapshots.frames]]
+id = "voyage"
+fn = "voyage"
+vars = [
+  { id = "voyage.chart", name = "chart", type = "&mut String", state = "live" },
+  { id = "voyage.guide", name = "guide", type = "Guide", value = "Guide { notes: String }", state = "live" },
+  { id = "voyage.stop", name = "stop", type = "&str", value = "\"珊瑚礁\"", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 25
+note = "（修正後）先 `build_dike` 再建立卷軸：`Guide<'a>` 的 `notes` 是 `&str`，直接借用 `h1`，heap 上只有一份航道"
+heap = [
+  { id = "h1", type = "String", value = "\"碼頭 → 燈塔灣 → 古碑\"", state = "live" },
+]
+pointers = [
+  { from = "main.chart", to = "h1", kind = "own" },
+  { from = "voyage.chart", to = "main.chart", kind = "mut" },
+  { from = "voyage.guide", to = "h1", kind = "shared" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.chart", name = "chart", type = "String", state = "live" },
+]
+
+[[memory_snapshots.frames]]
+id = "voyage"
+fn = "voyage"
+vars = [
+  { id = "voyage.chart", name = "chart", type = "&mut String", state = "live" },
+  { id = "voyage.guide", name = "guide", type = "Guide<'_>", value = "Guide { notes: &str }", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 29
+note = "（修正後）第 2 站指向原航道裡的「燈塔灣」，Ferris 繞過堤防抵達古碑"
+heap = [
+  { id = "h1", type = "String", value = "\"碼頭 → 燈塔灣 → 古碑\"", state = "live" },
+]
+pointers = [
+  { from = "main.chart", to = "h1", kind = "own" },
+  { from = "voyage.chart", to = "main.chart", kind = "mut" },
+  { from = "voyage.guide", to = "h1", kind = "shared" },
+  { from = "voyage.stop", to = "h1", kind = "shared" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.chart", name = "chart", type = "String", state = "live" },
+]
+
+[[memory_snapshots.frames]]
+id = "voyage"
+fn = "voyage"
+vars = [
+  { id = "voyage.chart", name = "chart", type = "&mut String", state = "live" },
+  { id = "voyage.guide", name = "guide", type = "Guide<'_>", value = "Guide { notes: &str }", state = "live" },
+  { id = "voyage.stop", name = "stop", type = "&str", value = "\"燈塔灣\"", state = "live" },
+]

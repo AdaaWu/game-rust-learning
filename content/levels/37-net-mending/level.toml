@@ -1,0 +1,210 @@
+id = "37-net-mending"
+chapter = 9
+order = 37
+title = "補網的螃蟹"
+kind = "debug"
+visual = "memory"
+
+story = """
+漁網裡混了幾條腐壞的魚，我請一隻年輕的螃蟹把牠們挑掉。
+牠一開始邊看邊丟，被編譯器罵了一頓，於是改用編號一條一條檢查，終於編譯過了。
+結果網子一收，牠就大喊「網破了！」，整個工坊停擺。
+幫我看看牠的編號是從哪裡開始數錯的。
+"""
+
+concept = """
+## 走訪集合時修改它
+
+- 直覺寫法：`for (i, f) in net.iter().enumerate() { if f.rotten { net.remove(i); } }`
+  - 編譯器回報 **E0502**：`iter()` 正共享借用著 `net`，迴圈裡又要可變借用
+  - 這是借用規則在保護你：一邊讀一邊改，讀到一半元素就搬家了
+- 改用索引 `for i in 0..net.len()` 可以騙過編譯器：每次 `net[i]` 只是短暫借用
+  - 但問題沒有消失，只是從編譯期延後到執行期
+
+## 為什麼會出界
+
+- `0..net.len()` 在迴圈**開始前就算好**，之後網子變短，範圍不會跟著變
+- `remove(i)` 把後面的元素全部往左移一格，長度減一
+  - 下一輪 `i + 1` 指到的是「原本的 i + 2」，原本的 i + 1 被跳過了
+  - 連續兩條爛魚，第二條就會漏網
+- 最後 `i` 追上已經變短的長度：`index out of bounds`
+
+## 正解：retain
+
+- `net.retain(|f| !f.rotten)`：保留 closure 回傳 `true` 的元素，一次走完、順序不變、**O(n)**
+  - 對照：迴圈裡每次 `remove(i)` 都要搬動後面所有元素，最壞 **O(n²)**
+- `HashMap::retain(|k, v| ..)`、`HashSet::retain` 也有同樣的方法
+- 另一種做法：先收集要刪的東西，迴圈結束後再改；或建一個新 `Vec` 再指派回去
+
+## 不要用 swap_remove
+
+- `swap_remove(i)` 拿最後一個元素填洞，O(1) 很快，但**順序會亂**
+- 題目要求好魚維持原本的順序
+
+## Debug 心法
+
+- panic 訊息的 `len` 和 `index` 告訴你：迴圈以為還有幾條，網子實際剩幾條
+- 在記憶體圖上逐步看 `i` 指到哪一條魚，比在腦中模擬可靠
+"""
+
+hints = [
+  "panic 說 the len is 3 but the index is 3：網子一開始有 5 條魚，迴圈範圍 0..net.len() 是什麼時候算出來的？",
+  "remove(i) 之後，後面的魚全部往左移一格；下一輪的 i 指到的是哪一條？連續兩條爛魚時會發生什麼事？",
+  "與其自己管索引，不如請 Vec 幫你篩：有一個方法只留下 closure 回傳 true 的元素，順序不變",
+]
+
+[[memory_snapshots]]
+line = 14
+note = "網子有 5 條魚，`0..net.len()` 在這一刻就算好了：`i` 會從 0 跑到 4"
+heap = [
+  { id = "h1", type = "Vec<Fish>", value = "[鯖魚(爛), 沙丁魚(爛), 鮪魚, 秋刀魚(爛), 鯛魚] · len=5", state = "live" },
+]
+pointers = [
+  { from = "main.net", to = "h1", kind = "own" },
+  { from = "mend.net", to = "main.net", kind = "mut" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.net", name = "net", type = "Vec<Fish>", state = "live" },
+]
+
+[[memory_snapshots.frames]]
+id = "mend"
+fn = "mend"
+vars = [
+  { id = "mend.net", name = "net", type = "&mut Vec<Fish>", state = "live" },
+  { id = "mend.i", name = "i", type = "usize", value = "0", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 16
+note = "`i = 0` 鯖魚是爛的，`remove(0)` 之後後面 4 條全部往左移一格，長度變成 4"
+heap = [
+  { id = "h1", type = "Vec<Fish>", value = "[沙丁魚(爛), 鮪魚, 秋刀魚(爛), 鯛魚] · len=4", state = "live" },
+]
+pointers = [
+  { from = "main.net", to = "h1", kind = "own" },
+  { from = "mend.net", to = "main.net", kind = "mut" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.net", name = "net", type = "Vec<Fish>", state = "live" },
+]
+
+[[memory_snapshots.frames]]
+id = "mend"
+fn = "mend"
+vars = [
+  { id = "mend.net", name = "net", type = "&mut Vec<Fish>", state = "live" },
+  { id = "mend.i", name = "i", type = "usize", value = "0", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 15
+note = "`i = 1` 指到的是鮪魚：沙丁魚搬到了 0 號位置，被跳過，**漏網了**"
+heap = [
+  { id = "h1", type = "Vec<Fish>", value = "[沙丁魚(爛), 鮪魚, 秋刀魚(爛), 鯛魚] · len=4", state = "live" },
+]
+pointers = [
+  { from = "main.net", to = "h1", kind = "own" },
+  { from = "mend.net", to = "main.net", kind = "mut" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.net", name = "net", type = "Vec<Fish>", state = "live" },
+]
+
+[[memory_snapshots.frames]]
+id = "mend"
+fn = "mend"
+vars = [
+  { id = "mend.net", name = "net", type = "&mut Vec<Fish>", state = "live" },
+  { id = "mend.i", name = "i", type = "usize", value = "1", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 16
+note = "`i = 2` 秋刀魚是爛的，`remove(2)` 後鯛魚左移，長度剩 3"
+heap = [
+  { id = "h1", type = "Vec<Fish>", value = "[沙丁魚(爛), 鮪魚, 鯛魚] · len=3", state = "live" },
+]
+pointers = [
+  { from = "main.net", to = "h1", kind = "own" },
+  { from = "mend.net", to = "main.net", kind = "mut" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.net", name = "net", type = "Vec<Fish>", state = "live" },
+]
+
+[[memory_snapshots.frames]]
+id = "mend"
+fn = "mend"
+vars = [
+  { id = "mend.net", name = "net", type = "&mut Vec<Fish>", state = "live" },
+  { id = "mend.i", name = "i", type = "usize", value = "2", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 15
+note = "`i = 3`，但網子只剩 3 條（0 到 2）：執行期 panic **index out of bounds: the len is 3 but the index is 3**"
+error = { target = "h1" }
+heap = [
+  { id = "h1", type = "Vec<Fish>", value = "[沙丁魚(爛), 鮪魚, 鯛魚] · len=3", state = "live" },
+]
+pointers = [
+  { from = "main.net", to = "h1", kind = "own" },
+  { from = "mend.net", to = "main.net", kind = "mut" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.net", name = "net", type = "Vec<Fish>", state = "live" },
+]
+
+[[memory_snapshots.frames]]
+id = "mend"
+fn = "mend"
+vars = [
+  { id = "mend.net", name = "net", type = "&mut Vec<Fish>", state = "live" },
+  { id = "mend.i", name = "i", type = "usize", value = "3", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 15
+note = "（修正後）`retain` 一次走完整張網，只留下好魚：鮪魚、鯛魚，順序不變"
+heap = [
+  { id = "h1", type = "Vec<Fish>", value = "[鮪魚, 鯛魚] · len=2", state = "live" },
+]
+pointers = [
+  { from = "main.net", to = "h1", kind = "own" },
+  { from = "mend.net", to = "main.net", kind = "mut" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.net", name = "net", type = "Vec<Fish>", state = "live" },
+]
+
+[[memory_snapshots.frames]]
+id = "mend"
+fn = "mend"
+vars = [
+  { id = "mend.net", name = "net", type = "&mut Vec<Fish>", state = "live" },
+]

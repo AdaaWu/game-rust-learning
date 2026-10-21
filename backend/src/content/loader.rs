@@ -54,10 +54,11 @@ fn read_file(path: &Path) -> Result<String, LoadError> {
     fs::read_to_string(path).or_else(|e| fail(path, e))
 }
 
-/// 載入 content 根目錄（含 chapters.toml、shared/grid_sim.rs、levels/）
+/// 載入 content 根目錄（含 chapters.toml、shared/grid_sim.rs、shared/timeline.rs、levels/）
 pub fn load(root: &Path) -> Result<LevelStore, LoadError> {
     let chapters = load_chapters(&root.join("chapters.toml"))?;
     let grid_sim = read_file(&root.join("shared").join("grid_sim.rs"))?;
+    let timeline = read_file(&root.join("shared").join("timeline.rs"))?;
 
     let levels_dir = root.join("levels");
     let entries = fs::read_dir(&levels_dir).or_else(|e| fail(&levels_dir, e))?;
@@ -68,7 +69,7 @@ pub fn load(root: &Path) -> Result<LevelStore, LoadError> {
         if !dir.is_dir() {
             continue;
         }
-        let level = load_level(&dir)?;
+        let level = load_level(&dir, &timeline)?;
         if !chapters.iter().any(|c| c.chapter == level.chapter) {
             return fail(
                 &dir,
@@ -139,7 +140,7 @@ fn read_source(dir: &Path, file: &str) -> Result<String, LoadError> {
     Ok(src)
 }
 
-fn load_level(dir: &Path) -> Result<Level, LoadError> {
+fn load_level(dir: &Path, timeline: &str) -> Result<Level, LoadError> {
     let toml_path = dir.join("level.toml");
     let raw: LevelToml =
         toml::from_str(&read_file(&toml_path)?).or_else(|e| fail(&toml_path, e))?;
@@ -188,8 +189,12 @@ fn load_level(dir: &Path) -> Result<Level, LoadError> {
         (_, None) => {}
     }
 
-    let starter = read_source(dir, "starter.rs")?;
-    let solution = read_source(dir, "solution.rs")?;
+    let mut starter = read_source(dir, "starter.rs")?;
+    let mut solution = read_source(dir, "solution.rs")?;
+    if raw.visual == LevelVisual::Timeline {
+        starter = attach_timeline(&starter, timeline);
+        solution = attach_timeline(&solution, timeline);
+    }
     let tests = read_source(dir, "tests.rs")?;
     let test_names = extract_test_names(&tests);
     if test_names.is_empty() {
@@ -215,6 +220,18 @@ fn load_level(dir: &Path) -> Result<Level, LoadError> {
         test_names,
         level_grid_src,
     })
+}
+
+/// timeline 關卡：原文、補結尾換行、空一行、接上小幫手全文
+pub fn attach_timeline(src: &str, helper: &str) -> String {
+    let mut out = String::with_capacity(src.len() + helper.len() + 2);
+    out.push_str(src);
+    if !out.ends_with('\n') {
+        out.push('\n');
+    }
+    out.push('\n');
+    out.push_str(helper);
+    out
 }
 
 /// ^[0-9]{2}-[a-z0-9-]+$
@@ -338,7 +355,8 @@ fn tuple(p: &Point) -> String {
 
 fn tuple_vec(points: &[Point]) -> String {
     let items: Vec<String> = points.iter().map(tuple).collect();
-    format!("vec![{}]", items.join(", "))
+    // 完整路徑，玩家自訂的 vec! 巨集改不到地圖
+    format!("::std::vec![{}]", items.join(", "))
 }
 
 /// 依 [grid] 產生 fn level_grid() -> Grid 原始碼

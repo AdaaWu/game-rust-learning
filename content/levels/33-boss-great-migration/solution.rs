@@ -33,17 +33,18 @@ fn legs() -> Vec<Leg> {
 
 // 分身偵察：一座一座站上窄橋，全部站穩後回報這段路線
 fn scout(leg: Leg, bridges: Arc<Vec<Mutex<()>>>, report: mpsc::Sender<(usize, Vec<String>)>) {
+    let _lane = timeline::lane(&format!("分身 {}", leg.index));
     // 所有分身都依橋的編號由小到大上鎖，不會互等
     let mut order = leg.bridges.clone();
     order.sort();
     let mut held = Vec::new();
     for &b in &order {
-        held.push(bridges[b].lock().unwrap());
+        held.push(timeline::lock(&bridges[b], &format!("窄橋 {}", b)).unwrap());
         println!("分身 {} 站上窄橋 {}", leg.index, b);
         thread::sleep(Duration::from_millis(30));
     }
     let moves = leg.moves.iter().map(|m| m.to_string()).collect();
-    report.send((leg.index, moves)).unwrap();
+    timeline::send(&report, "回報", (leg.index, moves)).unwrap();
     println!("分身 {} 回報完畢，讓出 {} 座窄橋", leg.index, held.len());
 }
 
@@ -58,7 +59,10 @@ fn plan(legs: Vec<Leg>) -> Vec<String> {
     }
     // 指揮官自己不送訊息，交回 tx，所有分身回報完 channel 才會關閉
     drop(tx);
-    let mut reports: Vec<(usize, Vec<String>)> = rx.iter().collect();
+    let mut reports = Vec::new();
+    while let Ok(report) = timeline::recv(&rx, "回報") {
+        reports.push(report);
+    }
     reports.sort_by_key(|(index, _)| *index);
     reports.into_iter().flat_map(|(_, moves)| moves).collect()
 }

@@ -3,7 +3,7 @@ chapter = 8
 order = 31
 title = "消失的寶石"
 kind = "debug"
-visual = "none"
+visual = "timeline"
 
 story = """
 大遷徙前夕，我派出一百隻分身，每隻負責一片海灘。
@@ -31,6 +31,12 @@ concept = """
 - 真正碰到內容前一定要先 `lock()`，同一時間只有一條執行緒拿得到 guard
 - 所以 `add_haul` 只需要 `&Mutex<u32>`，不用知道外面是 `Arc` 還是 `thread::scope` 借來的
 
+## 時間軸小幫手
+
+- 檔案最下方的 `mod timeline` 會把上鎖、解鎖印給右邊的時間軸看，不改變程式行為
+- `timeline::lock(&m, "計數器")` 和 `m.lock()` 用法相同，只多一個名字；回傳的 guard 一樣要 `.unwrap()`，離開作用域才解鎖
+- `timeline::note(...)` 在時間軸上插一面小旗子，`timeline::lane(...)` 替這條執行緒取名
+
 ## 對照第 28 關
 
 - `Rc<RefCell<T>>`：單執行緒，借用檢查在執行期
@@ -38,18 +44,19 @@ concept = """
 
 ## 2024 edition：尾端暫存值提早釋放
 
-- 函式最後一行 `*total.lock().unwrap()` 產生的 MutexGuard 是暫存值
+- 函式最後一行 `*timeline::lock(&total, "計數器").unwrap()` 產生的 guard 是暫存值（小幫手的 guard 包著 `MutexGuard`，規則相同）
 - 2024 起，尾端運算式的暫存值會在區域變數之前釋放，guard 不會比 `total` 活得久
 - 2021 同一行會觸發 E0597，必須先存進變數再回傳
 
 ## Debug 心法
 
 - 編譯器的警告也是線索：value assigned is never read
+- 看時間軸：每隻螃蟹的小旗子「讀到 n」寫的是多少？小旗子插在放開計數器之前還是之後？
 """
 
 hints = [
   "編譯器有一則警告說某個變數被賦值後從來沒被讀過，是 add_haul 裡的哪一個？它和計數器是同一個東西嗎？",
-  "let mut sum = *total.lock().unwrap(); 的 sum 是 u32 複本，不是計數器本身",
-  "把 guard 留在變數裡：let mut sum = total.lock().unwrap(); 再寫 *sum += gems;",
+  "let mut sum = *timeline::lock(total, \"計數器\").unwrap(); 的 sum 是 u32 複本，不是計數器本身；時間軸上它在拿到鎖的同一行就放開了",
+  "把 guard 留在變數裡：let mut sum = timeline::lock(total, \"計數器\").unwrap(); 再寫 *sum += gems;（小旗子改印 *sum）",
   "讀出舊值和寫回新值要在同一次 lock() 內完成（原子性）：分兩次上鎖，中間別的螃蟹可能插隊，寶石照樣會消失",
 ]

@@ -35,7 +35,7 @@ fn generates_level_grid_with_empty_vecs_for_omitted_arrays() {
     assert_eq!(
         generate_level_grid(&grid),
         "fn level_grid() -> Grid { Grid { width: 5, height: 3, start: (0, 0), goal: (4, 1), \
-         walls: vec![(2, 0), (2, 1)], gems: vec![], doors: vec![] } }"
+         walls: ::std::vec![(2, 0), (2, 1)], gems: ::std::vec![], doors: ::std::vec![] } }"
     );
 }
 
@@ -53,7 +53,7 @@ fn generates_level_grid_with_gems_and_doors() {
     assert_eq!(
         generate_level_grid(&grid),
         "fn level_grid() -> Grid { Grid { width: 12, height: 2, start: (11, 1), goal: (0, 0), \
-         walls: vec![(1, 0)], gems: vec![(0, 1), (5, 1)], doors: vec![(3, 0)] } }"
+         walls: ::std::vec![(1, 0)], gems: ::std::vec![(0, 1), (5, 1)], doors: ::std::vec![(3, 0)] } }"
     );
 }
 

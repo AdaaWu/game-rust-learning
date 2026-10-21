@@ -1,0 +1,61 @@
+id = "45-boss-tower-summit"
+chapter = 10
+order = 45
+title = "BOSS：塔頂的審判"
+kind = "debug"
+visual = "grid"
+
+story = """
+終於到了塔頂前的最後三層，塔主是一隻戴著單片眼鏡的老寄居蟹。
+牠翻開我一路寫的程式：模組、錯誤型別、備援計畫，還有我自己寫的檢查函式。
+我一出發就撞上牆，連第一步都沒走出去。塔主說：「你的錯誤躲在三個地方，一個藏著一個。」
+這一關，連我自己寫的測試也要接受審判。
+"""
+
+concept = """
+## 這關綜合了整章
+
+- 模組：`mod parser`、`mod planner`，可見性已經正確，不用改
+- 自訂錯誤：`TowerError` 有 `Display`、`Error::source()`，以及 `From<ParseIntError>`
+- `?` 與 `From`：`digits.parse::<u32>()?` 會呼叫 `From` 把錯誤轉成 `TowerError`
+- 交易性：`build` 先把整份計畫讀完，全部成功才寫進 `cmds`
+- 寫測試：`check_parse` 要在錯的 `parse_step` 上 panic（第 42 關的突變判題）
+
+## 會把錯誤變不見的寫法
+
+- `unwrap_or_default()`：失敗時給預設值，`u32` 的預設值是 `0`，壞數字就變成「走 0 格」
+- `let _ = ...`、`.ok()`、`unwrap_or(..)`：同樣會讓錯誤消失
+- 只有在「預設值就是正確答案」時才用；讀玩家輸入時通常不是
+
+## From 寫錯的後果
+
+- `From` 是 `?` 背後自動呼叫的，寫錯不會有任何編譯錯誤
+- 錯誤種類錯了，上層 `match` 就會走錯分支：把「數字寫錯」當成「沒寫」，給玩家錯的提示
+- 參數寫成 `_` 是一個訊號：轉換時把原本的錯誤丟掉了
+
+## 測試本身也會有 bug
+
+- 只測成功路徑的測試，抓不到任何「錯誤處理」的 bug
+- 每一種錯誤變體至少一個案例：`BadNumber`、`Missing`、`UnknownDir`
+- 檢查錯誤種類用 `matches!(結果, Err(TowerError::BadNumber(_)))`；只寫 `is_err()` 分不出種類
+
+## Debug 心法
+
+- 一次修一個：先讓畫面正常，再看 Submit 的測試訊息，最後回頭審自己的測試
+- 修好一個 bug 後症狀改變，代表前一個 bug 遮住了下一個
+"""
+
+hints = [
+  "Ferris 第一步就撞牆。第一層主計畫是 [\"Rx\", \"U2\"]，Rx 被讀成往右幾格？為什麼沒有改走備援計畫？",
+  "unwrap_or_default() 把壞數字變成 0；改成 ? 讓錯誤往上傳，route 才會改用備援計畫",
+  "畫面正常後看 Submit：錯誤種類應為 BadNumber。? 背後呼叫的是哪一個 From？它把 ParseIntError 包成了什麼？",
+  "最後審 check_parse：它只測了成功路徑。替 BadNumber、Missing、UnknownDir 各加至少一個案例，錯誤種類要分清楚",
+]
+
+[grid]
+width  = 7
+height = 7
+start  = [0, 6]
+goal   = [5, 0]
+walls  = [[0, 5], [1, 5], [2, 5], [4, 5], [5, 5], [6, 5], [0, 3], [2, 3], [3, 3], [4, 3], [5, 3], [6, 3], [0, 1], [1, 1], [2, 1], [3, 1], [4, 1], [6, 1]]
+gems   = [[3, 4], [1, 2]]

@@ -1,0 +1,140 @@
+id = "38-rank-twice"
+chapter = 9
+order = 38
+title = "排了兩次的排行榜"
+kind = "debug"
+visual = "memory"
+
+story = """
+工坊舉辦夾夾大賽，我負責排名次：分數高的在前，同分就照名字排。
+我很小心地排了兩次，先排分數、再排名字，應該萬無一失。
+結果頒獎典禮上，站在冠軍台的是全場最低分的丁丁。
+珍珠拿了 9 分，現在氣得夾子都在抖。
+"""
+
+concept = """
+## 穩定排序（stable sort）
+
+- `sort`、`sort_by`、`sort_by_key` 都是**穩定**的：比較結果相等的元素，排序後維持原本的前後順序
+- `sort_unstable*` 不保證這件事，換來少用一點記憶體、通常更快
+
+## 分兩趟排：後排的才是主鍵
+
+- 第二趟 `sort_by_key(名字)` 會把整個 Vec 依名字重排
+- 第一趟的分數順序只在「名字相同」時才會被保留下來
+- 所以「先排 A、再排 B」的結果是：**B 是主鍵、A 是次鍵**，和直覺相反
+  - 想要「分數為主、名字為次」，順序要反過來：先排名字、再排分數
+
+## 一趟排完：比較器寫清楚
+
+- `sort_by(|a, b| b.score.cmp(&a.score).then_with(|| a.name.cmp(&b.name)))`
+  - `b` 對 `a` 是高到低；`then_with` 只在前一個比較 `Equal` 時才執行
+- 或用 tuple 當 key：`sort_by_key(|c| (Reverse(c.score), c.name.clone()))`
+  - tuple 由左到右逐欄比較；`Reverse` 把該欄反過來
+  - 代價：每次比較都要 `clone` 名字
+- 一趟寫法的好處：意圖寫在同一行，不靠「穩定排序」這個隱含性質
+
+## Debug 心法
+
+- 沒有 panic、程式也跑完了，只有結果錯：先 Run 看主控台印出的名次
+- 逐步看記憶體圖：每一趟排序之後 Vec 長什麼樣子，哪一趟把對的結果蓋掉了
+"""
+
+hints = [
+  "Run 一下看名次：現在的排行榜看起來是照什麼排的？",
+  "第二次 sort_by_key 會把整個 Vec 重新排過一次；第一次排好的分數順序，什麼情況下才會被保留下來？",
+  "與其靠兩趟排序的先後，不如一趟就說清楚：比較器先比分數，分數相同時再比名字",
+]
+
+[[memory_snapshots]]
+line = 21
+note = "四隻螃蟹依報名順序排隊"
+heap = [
+  { id = "h1", type = "Vec<Crab>", value = "[小石 5, 珍珠 9, 丁丁 3, 海星 7]", state = "live" },
+]
+pointers = [
+  { from = "main.crabs", to = "h1", kind = "own" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.crabs", name = "crabs", type = "Vec<Crab>", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 16
+note = "第一趟依分數高到低排：這時候的順序其實已經是對的"
+heap = [
+  { id = "h1", type = "Vec<Crab>", value = "[珍珠 9, 海星 7, 小石 5, 丁丁 3]", state = "live" },
+]
+pointers = [
+  { from = "main.crabs", to = "h1", kind = "own" },
+  { from = "rank.crabs", to = "main.crabs", kind = "mut" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.crabs", name = "crabs", type = "Vec<Crab>", state = "live" },
+]
+
+[[memory_snapshots.frames]]
+id = "rank"
+fn = "rank"
+vars = [
+  { id = "rank.crabs", name = "crabs", type = "&mut Vec<Crab>", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 17
+note = "第二趟依名字重排**整個** Vec：四隻名字都不同，第一趟的分數順序完全被蓋掉，丁丁（3 分）變成第 1 名"
+error = { target = "h1" }
+heap = [
+  { id = "h1", type = "Vec<Crab>", value = "[丁丁 3, 小石 5, 海星 7, 珍珠 9]", state = "live" },
+]
+pointers = [
+  { from = "main.crabs", to = "h1", kind = "own" },
+  { from = "rank.crabs", to = "main.crabs", kind = "mut" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.crabs", name = "crabs", type = "Vec<Crab>", state = "live" },
+]
+
+[[memory_snapshots.frames]]
+id = "rank"
+fn = "rank"
+vars = [
+  { id = "rank.crabs", name = "crabs", type = "&mut Vec<Crab>", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 15
+note = "（修正後）一趟排完：先比分數，同分才比名字，珍珠 9 分拿下冠軍"
+heap = [
+  { id = "h1", type = "Vec<Crab>", value = "[珍珠 9, 海星 7, 小石 5, 丁丁 3]", state = "live" },
+]
+pointers = [
+  { from = "main.crabs", to = "h1", kind = "own" },
+  { from = "rank.crabs", to = "main.crabs", kind = "mut" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.crabs", name = "crabs", type = "Vec<Crab>", state = "live" },
+]
+
+[[memory_snapshots.frames]]
+id = "rank"
+fn = "rank"
+vars = [
+  { id = "rank.crabs", name = "crabs", type = "&mut Vec<Crab>", state = "live" },
+]

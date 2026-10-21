@@ -19,7 +19,11 @@ const props = defineProps<{
   staleRequest: boolean
   // grid 關卡：stdout 中的無效指令行加紅色左邊框與 ✗
   markGridCommands: boolean
+  // timeline 關卡：輸出分頁隱藏 @tl| 開頭的行
+  hideTimelineEvents?: boolean
 }>()
+
+const TL_PREFIX = '@tl|'
 
 const emit = defineEmits<{
   jump: [line: number, column: number]
@@ -81,7 +85,23 @@ const stdoutLines = computed(() => {
           .map((c) => c.line)
       : [],
   )
-  return lines.map((text, i) => ({ text, invalid: invalid.has(i) }))
+  const all = lines.map((text, i) => ({ text, invalid: invalid.has(i) }))
+  return props.hideTimelineEvents ? all.filter((l) => !l.text.startsWith(TL_PREFIX)) : all
+})
+
+// timeline 關卡隱藏的事件行數（含格式錯誤）
+const hiddenTimelineCount = computed(() => {
+  const exec = execution.value
+  if (!props.hideTimelineEvents || !exec) return 0
+  return exec.stdout.split(/\r?\n/).filter((l) => l.startsWith(TL_PREFIX)).length
+})
+
+// 測試程式中途當掉：沒有 failed、至少一個 not_run、stderr 非空
+const crashStderr = computed(() => {
+  const stderr = execution.value?.stderr ?? ''
+  const list = tests.value
+  if (stderr.trim() === '' || list.some((t) => t.status === 'failed') || !list.some((t) => t.status === 'not_run')) return null
+  return stderr.trim()
 })
 
 interface StatusCard {
@@ -225,6 +245,7 @@ const TEST_TEXT = { passed: '通過', failed: '失敗', not_run: '未執行' }
             </p>
           </article>
         </details>
+        <p v-if="hiddenTimelineCount > 0" class="console-note" data-testid="tl-hidden-note">已隱藏 {{ hiddenTimelineCount }} 行時間軸事件</p>
         <pre v-if="stdoutLines.length > 0" class="stdout" data-testid="stdout"><span
             v-for="(line, i) in stdoutLines"
             :key="i"
@@ -300,6 +321,10 @@ const TEST_TEXT = { passed: '通過', failed: '失敗', not_run: '未執行' }
 
       <!-- 測試結果 -->
       <div v-show="selected === 'tests'" role="tabpanel" class="console-panel">
+        <article v-if="crashStderr !== null" class="status-card is-danger" data-testid="test-crash-card">
+          <strong>測試程式在執行途中整個當掉了，後面的測試沒有機會跑</strong>
+          <pre class="status-detail">{{ crashStderr }}</pre>
+        </article>
         <p v-if="tests.length === 0" class="console-empty">按「送出」跑測試</p>
         <ul v-else class="test-list">
           <li

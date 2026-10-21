@@ -179,6 +179,29 @@ fn path_equals_file(w: &mut ApiWorld, path: String, id: String, file: String) {
     assert_eq!(text(at(&v, &path)), expected);
 }
 
+#[then(
+    regex = r#"^回應 JSON 的 "([^"]+)" 等於關卡 "([^"]+)" 的 starter\.rs 全文（不以換行結尾時補一個換行）＋ "\\n" ＋ content/shared/timeline\.rs 全文$"#
+)]
+fn path_equals_starter_with_timeline(w: &mut ApiWorld, path: String, id: String) {
+    let mut expected = fs::read_to_string(content_dir().join(format!("levels/{id}/starter.rs")))
+        .expect("讀關卡檔案");
+    if !expected.ends_with('\n') {
+        expected.push('\n');
+    }
+    expected.push('\n');
+    expected
+        .push_str(&fs::read_to_string(content_dir().join("shared/timeline.rs")).expect("讀小幫手"));
+    let v = w.json();
+    assert_eq!(text(at(&v, &path)), expected);
+}
+
+#[then(regex = r#"^回應 JSON 的 "([^"]+)" 含 "(.*)"$"#)]
+fn path_contains_text(w: &mut ApiWorld, path: String, needle: String) {
+    let v = w.json();
+    let s = text(at(&v, &path));
+    assert!(s.contains(&needle), "{path} 應含 {needle:?}");
+}
+
 #[then(regex = r#"^回應 JSON 的 "([^"]+)" 的 key 恰好為 "([^"]*)"$"#)]
 fn path_keys_exact(w: &mut ApiWorld, path: String, keys: String) {
     let v = w.json();

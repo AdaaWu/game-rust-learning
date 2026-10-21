@@ -1,5 +1,5 @@
 # 執行：playwright-bdd（frontend e2e）
-# 規格：ux.md §1.2、§1.3、§1.4、§2、§3、§6.6、§7.2、§7.3、§8.3；api.md §0.2；architecture.md §7.2、§7.4；decisions.md §14 ③⑥、§15
+# 規格：ux.md §1.2、§1.3、§1.4、§2、§3、§6.6、§7.2、§7.3、§8.3；api.md §0.2、§0.3；architecture.md §3.6、§7.2、§7.4；decisions.md §14 ③⑥、§15
 # 預設以 page.route mock API；「mock 回應範例」指 api.md v1.3 中同名的 JSON 範例，step 直接載入為 fixture：
 #   Run「成功」「編譯錯誤」「執行超時」「panic」：api.md §3
 #   Submit「全部通過」「部分失敗，含 warning」「編譯錯誤（錯誤落在隱藏測試區段）」「執行超時」：api.md §4
@@ -426,6 +426,63 @@ Feature: 關卡頁編輯器、Run／Submit 與結果顯示
     And 玩家切到「測試結果」分頁
     Then "gull_shares_the_chest" 那一列顯示「—」圖示與文字「未執行」，為灰色
     And 點擊 "gull_shares_the_chest" 那一列不會展開
+
+  # ux.md §3.3 test_failed「測試程式中途當掉」；architecture.md §3.6 程式 abort；api.md §0.3（exit 134）；decisions.md §15 ⑬ 第二季課程追加裁定、⑭
+  # 回應取自 rustc 1.99.1 實際執行 49-echo-rune starter 的 Submit（--test --test-threads=1，exit 134）；thread id 依執行而異
+  # 49 不在測試用 8 關 fixture，本畫面只依 Submit 回應，借 28-refcell-panic 開啟
+  Scenario: 測試程式中途 stack overflow 時顯示整個當掉的卡片與 stderr
+    Given mock API 的 Submit 回應：
+      """
+      { "status": "test_failed", "passed": false,
+        "compile": { "success": true, "timed_out": false, "diagnostics": [] },
+        "execution": { "exit_code": 134,
+          "stdout": "\nrunning 4 tests\ntest __quest_hidden_tests::count_gems_in_spell ... ok\ntest __quest_hidden_tests::zz_route_reads_the_spell ... ",
+          "stderr": "\nthread '__quest_hidden_tests::zz_route_reads_the_spell' (30) has overflowed its stack\nfatal runtime error: stack overflow, aborting\n",
+          "timed_out": false, "stdout_truncated": false, "stderr_truncated": false },
+        "tests": [
+          { "name": "count_gems_in_spell", "status": "passed", "message": null },
+          { "name": "zz_route_reads_the_spell", "status": "not_run", "message": null },
+          { "name": "zz_rune_display_each", "status": "not_run", "message": null },
+          { "name": "zz_rune_display_inside_sentence", "status": "not_run", "message": null } ] }
+      """
+    And 玩家開啟關卡 "28-refcell-panic"
+    When 玩家點「送出」
+    Then 主控台切到「測試結果」分頁
+    And 「測試結果」分頁標題顯示「通過 1 / 共 4」
+    And 「測試結果」分頁頂部顯示紅色卡片「測試程式在執行途中整個當掉了，後面的測試沒有機會跑」
+    And 該卡片以等寬字型顯示 stderr 原文，含 "has overflowed its stack" 與 "fatal runtime error: stack overflow, aborting"
+    And 測試結果依序為：
+      | name                            | icon | text   |
+      | count_gems_in_spell             | ✓    | 通過   |
+      | zz_route_reads_the_spell        | —    | 未執行 |
+      | zz_rune_display_each            | —    | 未執行 |
+      | zz_rune_display_inside_sentence | —    | 未執行 |
+    And 沒有任何測試列展開
+
+  # ux.md §3.3 test_failed「測試程式中途當掉」的條件（tests 沒有任何 failed）
+  Scenario: 有失敗測試時不顯示整個當掉的卡片
+    Given mock API 的 Submit 回「部分失敗，含 warning」範例
+    And 玩家開啟關卡 "31-shared-counter"
+    When 玩家點「送出」
+    Then 「測試結果」分頁沒有「測試程式在執行途中整個當掉了，後面的測試沒有機會跑」卡片
+
+  # ux.md §3.3 runtime_panic「若 panic 訊息含 main.rs:行:欄，編輯器在該行畫紅色波浪線」；architecture.md §3.6 程式 abort（Run 為 runtime_panic、沒有 main.rs:行:欄，不畫 panic marker）
+  # stderr 取自 rustc 1.99.1 實際執行 49-echo-rune starter 的 Run（exit 134）
+  Scenario: Run 時 stack overflow 顯示 panic 卡片但不畫 panic marker
+    Given mock API 的 Run 回應：
+      """
+      { "status": "runtime_panic",
+        "compile": { "success": true, "timed_out": false, "diagnostics": [] },
+        "execution": { "exit_code": 134, "stdout": "",
+          "stderr": "\nthread 'main' (11179858) has overflowed its stack\nfatal runtime error: stack overflow, aborting\n",
+          "timed_out": false, "stdout_truncated": false, "stderr_truncated": false } }
+      """
+    And 玩家開啟關卡 "28-refcell-panic"
+    When 玩家點「執行」
+    Then 主控台切到「輸出」分頁
+    And 「輸出」分頁最後一張卡片標題為「程式在執行途中當掉了（panic）」
+    And 該卡片顯示 stderr 原文，含 "has overflowed its stack"
+    And 編輯器沒有任何 error 等級的 marker
 
   # ---------- timeout／memory_limit／output_limit ----------
 

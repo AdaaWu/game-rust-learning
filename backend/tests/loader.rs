@@ -12,6 +12,7 @@ const GRID: &str = "01-walk-grid";
 const GRID2: &str = "09-late-grid";
 const PLAIN: &str = "02-plain-sum";
 const MEMORY: &str = "03-move-memory";
+const TIMELINE: &str = "04-bridge-timeline";
 
 fn toml(id: &str) -> String {
     format!("levels/{id}/level.toml")
@@ -31,7 +32,7 @@ fn set_grid(cd: &ContentDir, body: &str) {
 fn loads_all_fixture_levels_sorted_by_chapter_then_order() {
     let store = load_fixture_store();
     let ids: Vec<&str> = store.levels().iter().map(|l| l.id.as_str()).collect();
-    assert_eq!(ids, vec![GRID, GRID2, PLAIN, MEMORY]);
+    assert_eq!(ids, vec![GRID, GRID2, PLAIN, MEMORY, TIMELINE]);
 }
 
 #[test]
@@ -47,7 +48,7 @@ fn skips_non_directory_entries_in_levels() {
     assert!(cd.path("levels/.gitkeep").exists(), "fixture 應含 .gitkeep");
     cd.write("levels/notes.txt", "不是關卡");
     let store = cd.load().expect(".gitkeep 與一般檔案應被略過");
-    assert_eq!(store.levels().len(), 4);
+    assert_eq!(store.levels().len(), 5);
 }
 
 #[test]

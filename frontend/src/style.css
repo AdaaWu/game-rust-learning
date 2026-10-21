@@ -39,6 +39,7 @@
   --star-on: #ffc94a; --star-off: #ecd9bf; --star-glow: 0 2px 0 #e0a21e;
   --mem-own: #56677A; --borrow-shared: #0072B2; --borrow-mut: #E69F00; --mem-moved: #9AA0A6;
   --line-active: rgba(0, 114, 178, 0.12);
+  --tl-lock-1: #0072B2; --tl-lock-2: #B36B00; --tl-lock-3: #007A5A; --tl-lock-4: #B3478A;
 }
 
 [data-theme='dark'] {
@@ -60,6 +61,7 @@
   --star-on: #ffd166; --star-off: #2f5c70; --star-glow: 0 0 12px rgba(255, 209, 102, .5);
   --mem-own: #9AA8B8; --borrow-shared: #56B4E9; --borrow-mut: #F0B840; --mem-moved: #5C6166;
   --line-active: rgba(86, 180, 233, 0.16);
+  --tl-lock-1: #56B4E9; --tl-lock-2: #F0B840; --tl-lock-3: #4FD1A5; --tl-lock-4: #E59CC4;
 }
 
 /* 基礎 */

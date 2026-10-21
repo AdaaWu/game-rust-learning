@@ -1,0 +1,56 @@
+id = "40-tower-gates"
+chapter = 10
+order = 40
+title = "塔門的通行證"
+kind = "fix-compile"
+visual = "grid"
+
+story = """
+離開集合工坊，我在市集北邊看到一座高塔，每層樓都有寄居蟹守門員。
+守門員只認 `pub` 通行證：沒有通行證的函式和模組，塔外的人一律叫不動。
+我照著路線圖要爬上塔頂，編譯器卻說路線和樓梯都「是私有的」。
+但塔頂暗門的密碼可不能給外人看，通行證只能發給真的需要的人。
+"""
+
+concept = """
+## mod：把程式分成房間
+
+- `mod tower { ... }` 宣告一個模組；模組可以巢狀：`tower::stairs`
+- 呼叫時用路徑：`tower::plan()`、`tower::stairs::climb(..)`
+- `use super::Floor;`：`super` 指上一層模組，`crate` 指最外層
+
+## 預設私有
+
+- 模組裡的函式、struct、子模組**預設私有**：只有同一個模組和它的子模組看得到
+- 子模組可以看到祖先的私有項目（`stairs` 可以用 `tower` 的私有東西），反過來不行
+- 從外面用到私有項目，編譯器回報 **E0603**（`function plan is private`、`module stairs is private`）
+- 路徑上**每一段**都要看得到：`climb` 本身是 `pub`，但 `stairs` 是私有的，整條路徑照樣不通
+
+## pub 的幾種寬度
+
+- `pub`：誰都看得到（做成函式庫給別人用時才有差）
+- `pub(crate)`：整個 crate 看得到，crate 外看不到
+- `pub(super)`：只有上一層模組看得到
+- 單一檔案的程式只有一個 crate，`pub` 和 `pub(crate)` 效果一樣；寫 `pub(crate)` 是把意圖寫清楚
+
+## 最小可見性原則
+
+- 只公開外面真的要用的東西：這關是 `plan` 和 `stairs`
+- `door_code` 是塔內的實作細節，保持私有：之後改密碼，外面的程式不會跟著壞
+- 取捨：公開越多，改內部時要顧慮的呼叫者越多；全部改 `pub` 雖然能過編譯，等於把門鎖拆掉
+- `struct` 的欄位也各自有可見性：`pub struct Floor` 只公開型別，欄位還要各自加 `pub`
+"""
+
+hints = [
+  "編譯器回報了兩個 E0603，分別是哪兩個名字？它們各自在哪個模組裡？",
+  "main 在 tower 外面：它要叫得動 plan，也要能走進 stairs 這個房間",
+  "在 plan 的 fn 前、stairs 的 mod 前各加通行證（pub 或 pub(crate)）；door_code 沒有人從外面用，維持私有",
+]
+
+[grid]
+width  = 6
+height = 7
+start  = [0, 6]
+goal   = [4, 0]
+walls  = [[0, 5], [1, 5], [2, 5], [3, 5], [5, 5], [0, 3], [2, 3], [3, 3], [4, 3], [5, 3], [0, 1], [1, 1], [2, 1], [3, 1], [5, 1]]
+doors  = [[4, 1]]

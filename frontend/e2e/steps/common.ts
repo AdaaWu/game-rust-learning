@@ -10,7 +10,7 @@ const QUOTED = '"((?:[^"\\\\]|\\\\.)*)"'
 const MAC_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36'
 const WIN_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36'
 
-async function setPlatform(world: World, platform: 'Windows' | 'macOS') {
+export async function setPlatform(world: World, platform: 'Windows' | 'macOS') {
   await world.page.addInitScript(
     ([p, ua]) => {
       Object.defineProperty(Navigator.prototype, 'platform', { configurable: true, get: () => p })

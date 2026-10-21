@@ -62,6 +62,9 @@
 - JudgeConfig 加 `docker_bin` 供測試模擬 docker 不可用；Run 也加 `-A dead_code`
 - rustc 原文 message 的反引號照字面保留；只有 errorHints 模板渲染 `<code>`
 - MVP 之外的 24 關完整內容以 `content/` 為唯一來源，curriculum.md 保留 §3 摘要（避免兩份漂移）
+- CI 只在 PR 合入 main（每季一包）與手動觸發時跑；平常開發以本機兩層測試為主（快速層：cargo test、vitest、vue-tsc；完整層：--ignored、e2e，於驗收時跑）
+- commit message 採 `type(scope) 中文摘要`（不加冒號）（2026-10-21 起；main 既有 6 個 `[type]` commit 不改寫）
+- timeline 摘要：第 8 章 30、31、33 以 stdout `@tl|` 事件呈現執行緒泳道、鎖持有／等待、訊息箭頭與死鎖（decisions ⑬）；小幫手 content/shared/timeline.rs 由 loader 接在 starter／solution 尾端；一關一種 visual
 - 需求外不做：風格切換器、JudgeConfig 環境變數覆寫、關卡 hot reload、上一步按鈕、欄寬拖曳、ASCII 地圖、隱藏關
 
 ## 階段 0：環境
@@ -172,10 +175,63 @@
 - [x] 產出 commit 切分清單給使用者確認（排除 `frontend/.vscode/`）
 - [x] 使用者同意後提交（6 個 commit：8bc40ac…d570590）
 
+## 第二季：擴充關卡＋並行可視化（2026-10-21 使用者核准）
+
+> 範圍：新增第 9–12 章（每章 6–7 關、debug 比例逐章提高）與第 13 章「除錯試煉場」（6–8 關全 debug）；新增並行時間軸可視化並套用到第 8 章
+> 使用者追加：關卡可以多，重點是後段要有 debug 關卡，難度漸進式上升（每關標難度、第 13 章逐關遞增無回落）
+> 流程同第一季：SDD → BDD → TDD（兩棒）→ 內容（含反取巧反例）→ 三輪驗收 → 提交清單給使用者確認
+
+### S2-1 SDD
+
+- [x] 課程：curriculum v1.4 新增第 9–13 章 34 關（34–67，build 7、fix-compile 5、debug 22），全遊戲 13 章 67 關；每關標難度與 debug 階梯 D1–D5；章名寫入 §1.7
+- [x] 架構＋UX：timeline 可視化規格（v1.4，decisions ⑬：stdout `@tl|` 事件、shared/timeline.rs 小幫手、TimelineView、一關一種 visual）（事件來源與格式、loader 驗證、TimelineView 元件、互動狀態、與 grid 的取捨）；第 8 章哪些關改用 timeline
+- [x] 驗收員檢查規格 v1.4：不通過（main 泳道無 end、curriculum 未同步 ⑬⑭、67 缺複習內容）
+- [x] 規格 v1.5 同步修正（含 curriculum 同步 timeline，decisions ⑮）
+
+### S2-2 BDD
+
+- [x] `features/ui_timeline.feature`（40 情境）、ui_editor 中途當掉卡片、後端 feature 中 visual 相依處（關卡數最後統一同步）
+
+### S2-3 TDD
+
+- [x] 後端（loader_timeline 17、routes、timeline_events、content_levels 10/10 全綠）：loader 支援 timeline（visual 列舉、接上 shared/timeline.rs、驗證規則）與內容測試（solution 無循環等待、泳道收尾、33 starter 有循環）（第一棒紅燈 → 第二棒綠燈）
+- [x] 前端（Vitest 835 全綠、build 通過）：parseTimelineEvents／deriveTimeline＋TimelineView、主控台隱藏 `@tl|` 行、中途當掉卡片（第一棒紅燈 → 第二棒綠燈）；e2e 接 ui_timeline.feature（e2e 273 全綠、Vitest 837）
+
+### S2-4 內容
+
+- [x] 第 8 章：30、31、33 改用 timeline（33 移除 [grid]），32 維持 grid；content/shared/timeline.rs 建立
+- [x] 第 9–13 章平行落檔：34–67 共 34 關＋約 100 個取巧反例，各自在 runner 連跑 3 次通過（67 總關卡），每關附取巧反例 fixture
+- [x] 落檔後檢查：49 zz_、54 matcher 改玩家完成、67 依 v1.5（check_to_cell 改 todo!、只由測試呼叫）
+- [x] 落檔後用正式 content 重跑 timeline stdout，同步 ui_timeline 附錄與前端 fixture（行號）、e2e mock levels.json 加入 30／31／33 timeline 版
+- [x] 31 關改 timeline 後 warning 變 1 筆：同步 submit.feature、api.md §4 範例
+- [x] 後端內容測試、cheats 測試、cucumber（後端 250＋ignored 45 全綠、cucumber 102 情境、67 關內容約 100s；前端 Vitest 839、e2e 273）、前端 e2e 全綠
+
+### S2-5 驗收
+
+- [x] 驗收員第一輪：工程全綠；不通過——38、59 可取巧、54 提示太直白，另有提示／故事／規格文字落差
+- [x] 修正：38／59／54 測試與提示、12 關改用欄位比對、提示與故事落差、39 註解、curriculum v1.6 同步（反例 113 個、content_levels 全綠）
+- [x] 驗收員第二輪：有條件通過——全綠、上輪問題皆修；新發現改寫斷言巨集可讓隱藏測試失效（全關卡）
+- [x] 斷言巨集加固：65 個 tests.rs＋grid_sim 共 676 處改完整路徑、level_grid 用 ::std::vec!、6 個新反例（共 119 個）、curriculum 54／63 落差
+- [x] 驗收員第三輪：巨集加固有效、全綠（後端 250＋45、cucumber 102、Vitest 839、e2e 273）；新發現遮蔽 std 方法／型別類取巧——grid_sim 修正，其餘列已知殘留
+- [x] grid_sim 22 處方法改完整語法＋01 trait_contains 反例（反例共 120 個、content_levels 全綠）
+
+### S2-0 GitHub 與 CI
+
+- [x] 個人帳號 AdaaWu 建 private repo game-rust-learning、push main（https://github.com/AdaaWu/game-rust-learning）
+- [x] `.github/workflows/ci.yml`（backend、backend-docker、frontend）與精簡 README（PR #2 取代 #1：CI 三個 job 全綠，待使用者 merge）
+
+### S2-6 提交
+
+- [x] commit 切分清單給使用者確認
+- [x] 使用者同意後提交並開 PR 到 main：5 個 commit（37427e2…c67939b），PR #3；待 #2 合入後處理衝突並跑 CI
+
 ## 後續版本（MVP 之後）
 
-- [ ] 第 8 章並行可視化（執行緒時間軸），補 20、23、25、30、31 無可視化關卡的畫面
-- [ ] trait 的 debug 關、HashMap、Display 觀念補關
+- [ ] 公開部署評估（前端 GitHub Pages、後端另找主機、沙箱強化、限流、成本）：使用者 2026-10-21 決定先擱置
+
+- [ ] Docker 判題測試改用每個測試行程專屬 label，避免與執行中的後端或 e2e 互相干擾
+- [ ] timeline 目前步數直線、手機版可視化區比例
+- [ ] 補 20、23、25 無可視化關卡的畫面（第 8 章時間軸已排入第二季）
 - [ ] 難度曲線微調：09、11、12 連續單行修正、03 跳太快
 
 - [ ] ContainerGuard Drop 的 `docker rm -f` 加逾時（daemon 不回應時會殘留執行緒，不影響請求）

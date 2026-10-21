@@ -1,0 +1,56 @@
+id = "51-copied-counter"
+chapter = 11
+order = 51
+title = "數不到的步數"
+kind = "debug"
+visual = "grid"
+
+story = """
+迷宮的告示牌寫著：「熱身走了幾格，就往下潛幾格撿寶石。」
+我做了一個計步器，每走一格就讓 closure 幫我加 1。
+可是計步器每次都說「今天走了 0 步」，我在起點附近就挖不到寶石了。
+沒有 panic、沒有錯誤，只有編譯器嘀咕了兩句 warning。
+"""
+
+concept = """
+## closure 怎麼捕捉變數
+
+- 不加 `move`：closure 用到什麼就**借**什麼，`|| steps += 1` 會可變借用外面的 `steps`
+- 加 `move`：把捕捉的變數**搬進** closure
+  - 對 `String`、`Vec` 這類非 `Copy` 型別：所有權轉進 closure，外面不能再用
+  - 對 `i32`、`u32` 這類 **`Copy`** 型別：搬進去的是一份**副本**，外面的變數照樣能用，編譯器不會阻止你
+
+## 本關的 bug
+
+- `move || steps += 1`：closure 裡改的是自己的副本，外面的 `steps` 永遠是 0
+- 程式完全合法，不會 panic，結果只是「數字錯」
+- 唯一的線索是 rustc 的兩個 warning（`unused_assignments`）
+  - `value captured by steps is never read`：被捕捉進 closure 的那份副本沒人讀
+  - `value assigned to steps is never read`：`+= 1` 寫進去的值沒人讀
+  - 還附了一句提示：did you mean to capture by reference instead?
+
+## 修法與取捨
+
+- 拿掉 `move`，讓 closure 可變借用 `steps`；`patrol` 收 `impl FnMut()`，剛好允許改外面的變數
+- 什麼時候真的需要 `move`：closure 要活得比目前的函式久（例如交給 `thread::spawn`），這時改用回傳值或 `Arc<Mutex<_>>`／原子型別帶出結果
+- 習慣：**warning 也是線索**，特別是 never read、never used 這類，常常代表資料流斷掉了
+
+## Debug 心法
+
+- 數字錯卻沒有 panic：從「這個數字在哪裡被改」往回找
+- 先看編譯輸出：rustc 已經指著出事的那一行
+"""
+
+hints = [
+  "計步器永遠是 0。Run 之後先看編譯器的 warning：它說哪個值 never read？",
+  "move 會把 steps 搬進 closure。steps 是 u32，搬進去的是本尊還是副本？",
+  "把 count_beats 裡 closure 前面的 move 拿掉，讓它可變借用外面的 steps",
+]
+
+[grid]
+width  = 9
+height = 6
+start  = [0, 0]
+goal   = [8, 5]
+walls  = [[2, 0], [0, 1], [2, 1], [0, 2], [2, 2], [5, 3], [3, 4], [4, 5], [7, 5]]
+gems   = [[1, 3], [8, 4]]

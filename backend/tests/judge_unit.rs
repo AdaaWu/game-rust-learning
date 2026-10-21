@@ -939,3 +939,109 @@ fn submit_response_exec_oom() {
         ]
     );
 }
+
+// ───────── v1.4 程式 abort（stack overflow，exit 134）─────────
+
+const ABORT_EXIT: i32 = 134;
+
+fn abort_exit(file: &str) -> i32 {
+    read_fixture(&format!("abort/{file}"))
+        .trim()
+        .parse()
+        .expect("exit code fixture")
+}
+
+#[test]
+fn abort_fixtures_are_real_exit_134() {
+    assert_eq!(abort_exit("run_exit.txt"), ABORT_EXIT);
+    assert_eq!(abort_exit("submit_exit.txt"), ABORT_EXIT);
+}
+
+#[test]
+fn status_run_abort_134_is_runtime_panic() {
+    let c = raw(Some(0));
+    assert_eq!(
+        determine_status(Mode::Run, &c, Some(&raw(Some(ABORT_EXIT))), &[]),
+        JudgeStatus::RuntimePanic
+    );
+}
+
+#[test]
+fn status_submit_abort_134_with_passed_and_not_run_is_test_failed() {
+    let c = raw(Some(0));
+    let tests = [
+        test("a", TestStatus::Passed),
+        test("b", TestStatus::Passed),
+        test("c", TestStatus::NotRun),
+    ];
+    assert_eq!(
+        determine_status(Mode::Submit, &c, Some(&raw(Some(ABORT_EXIT))), &tests),
+        JudgeStatus::TestFailed
+    );
+}
+
+#[test]
+fn status_abort_134_is_not_memory_limit() {
+    let c = raw(Some(0));
+    let tests = [test("a", TestStatus::NotRun)];
+    for (mode, tests) in [(Mode::Run, &[][..]), (Mode::Submit, &tests[..])] {
+        assert_ne!(
+            determine_status(mode, &c, Some(&raw(Some(ABORT_EXIT))), tests),
+            JudgeStatus::MemoryLimit,
+            "{mode:?}"
+        );
+    }
+}
+
+#[test]
+fn run_response_abort_keeps_exit_134_and_overflow_stderr() {
+    let exec = CappedRun {
+        exit_code: Some(abort_exit("run_exit.txt")),
+        stdout: read_fixture("abort/run_stdout.txt"),
+        stderr: read_fixture("abort/run_stderr.txt"),
+        ..CappedRun::default()
+    };
+    let r = build_run_response(&raw(Some(0)), vec![], Some(exec));
+    assert_eq!(r.status, JudgeStatus::RuntimePanic);
+    let e = r.execution.expect("執行結果");
+    assert_eq!(
+        e.exit_code,
+        Some(ABORT_EXIT),
+        "非 host kill，exit_code 照實回傳"
+    );
+    assert_eq!(
+        e.stdout,
+        read_fixture("abort/run_stdout.txt"),
+        "abort 前的輸出保留"
+    );
+    assert_eq!(e.stderr, read_fixture("abort/run_stderr.txt"));
+    assert!(e.stderr.contains("has overflowed its stack"));
+}
+
+#[test]
+fn submit_response_abort_marks_finished_passed_rest_not_run_and_keeps_stderr() {
+    let exec = CappedRun {
+        exit_code: Some(abort_exit("submit_exit.txt")),
+        stdout: read_fixture("abort/submit_stdout.txt"),
+        stderr: read_fixture("abort/submit_stderr.txt"),
+        ..CappedRun::default()
+    };
+    let declared = names(&["a_first", "b_overflows", "c_never"]);
+    let r = build_submit_response(&raw(Some(0)), vec![], Some(exec), &declared);
+    assert_eq!(r.status, JudgeStatus::TestFailed);
+    assert!(!r.passed);
+    assert_eq!(
+        statuses(&r.tests),
+        vec![TestStatus::Passed, TestStatus::NotRun, TestStatus::NotRun]
+    );
+    assert!(r.tests.iter().all(|t| t.message.is_none()), "{:?}", r.tests);
+    let e = r.execution.expect("執行結果");
+    assert_eq!(e.exit_code, Some(ABORT_EXIT));
+    assert!(!e.timed_out);
+    assert_eq!(
+        e.stderr,
+        read_fixture("abort/submit_stderr.txt"),
+        "stderr 保留 overflow 訊息"
+    );
+    assert!(e.stderr.contains("fatal runtime error: stack overflow"));
+}

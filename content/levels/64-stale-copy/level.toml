@@ -1,0 +1,221 @@
+id = "64-stale-copy"
+chapter = 13
+order = 64
+title = "改錯的分身"
+kind = "debug"
+visual = "memory"
+
+story = """
+第五道試煉是試煉場的醫護站，受傷的螃蟹排成一列等我治療。
+我寫了一個迴圈，每一隻都把血量補滿，跑起來又快又安靜。
+可是大家走出醫護站，血量還是 3、還是 5，一隻都沒好。
+沒有 panic、沒有警告，連海鷗都說程式看起來沒問題，只剩記憶體圖能告訴我發生了什麼。
+"""
+
+concept = """
+## clone 出來的是另一份資料
+
+- `crabs.clone()` 在 heap 上**複製出第二個 Vec**，裡面每隻螃蟹（連名字的 String）也都複製一份
+- `for mut crab in crabs.clone()` 從**複本**裡一隻一隻拿出來，`crab` 是複本的螃蟹
+- 改 `crab.hp` 改到的是複本；迴圈結束複本被丟掉，修改也跟著消失
+- 原本的 `crabs` 從頭到尾沒被碰過：編譯器不會警告，因為這是完全合法的程式
+
+## 想改原資料：借用它
+
+- `for crab in crabs.iter_mut()`：`crab` 是 `&mut Crab`，指向原本 Vec 裡的元素
+- 寫成 `for crab in &mut *crabs` 或 `for crab in crabs.iter_mut()` 都可以
+- 這也比較省：不用複製整個 Vec 和每一個 String
+
+## 為什麼會想 clone
+
+- 常見理由：怕「一邊走訪一邊修改」被借用規則擋下，就先複製一份
+- 其實 `iter_mut()` 本來就允許逐一修改元素；被擋的是**增刪元素**（改變 Vec 本身）
+- 真的需要複本時，記得把結果放回去：先在複本上改好，再 `*crabs = copy;` 整個換掉，這是合法做法
+
+## Debug 心法
+
+- D3 等級：沒有 panic、沒有警告，線索在**記憶體圖**
+- 看圖時問：修改落在哪一塊 heap？那一塊和 main 手上的是同一塊嗎？函式結束後它還在嗎？
+"""
+
+hints = [
+  "播放記憶體圖：heal_all 執行時 heap 上有幾個 Vec？補血那一步改到的是哪一個？",
+  "crabs.clone() 會複製出一整份新的螃蟹，迴圈改的是複本，函式結束複本就被丟掉了",
+  "不要複製，直接借用原本 Vec 裡的每一隻螃蟹來改：有一個 iter 方法會給你 &mut",
+]
+
+[[memory_snapshots]]
+line = 21
+note = "main 排好兩隻受傷的螃蟹，準備送進醫護站"
+heap = [
+  { id = "h1", type = "Vec<Crab>", value = "[阿鉗 3/10, 小殼 5/8]", state = "live" },
+]
+pointers = [
+  { from = "main.crabs", to = "h1", kind = "own" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.crabs", name = "crabs", type = "Vec<Crab>", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 11
+note = "`crabs.clone()` 在 heap 複製出**第二個 Vec**，迴圈從複本裡拿出第一隻螃蟹放進 `crab`"
+heap = [
+  { id = "h1", type = "Vec<Crab>", value = "[阿鉗 3/10, 小殼 5/8]", state = "live" },
+  { id = "h2", type = "Vec<Crab>（複本）", value = "[（已取出）, 小殼 5/8]", state = "live" },
+]
+pointers = [
+  { from = "main.crabs", to = "h1", kind = "own" },
+  { from = "heal_all.crabs", to = "main.crabs", kind = "mut" },
+  { from = "heal_all.copy", to = "h2", kind = "own" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.crabs", name = "crabs", type = "Vec<Crab>", state = "live" },
+]
+
+[[memory_snapshots.frames]]
+id = "heal_all"
+fn = "heal_all"
+vars = [
+  { id = "heal_all.crabs", name = "crabs", type = "&mut Vec<Crab>", state = "live" },
+  { id = "heal_all.copy", name = "crabs.clone()", type = "IntoIter<Crab>", state = "live" },
+  { id = "heal_all.crab", name = "crab", type = "Crab", value = "阿鉗 3/10", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 12
+note = "補血：`crab` 變成 10/10，可是它是從複本拿出來的；main 的 `h1` 還是 3/10"
+heap = [
+  { id = "h1", type = "Vec<Crab>", value = "[阿鉗 3/10, 小殼 5/8]", state = "live" },
+  { id = "h2", type = "Vec<Crab>（複本）", value = "[（已取出）, 小殼 5/8]", state = "live" },
+]
+pointers = [
+  { from = "main.crabs", to = "h1", kind = "own" },
+  { from = "heal_all.crabs", to = "main.crabs", kind = "mut" },
+  { from = "heal_all.copy", to = "h2", kind = "own" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.crabs", name = "crabs", type = "Vec<Crab>", state = "live" },
+]
+
+[[memory_snapshots.frames]]
+id = "heal_all"
+fn = "heal_all"
+vars = [
+  { id = "heal_all.crabs", name = "crabs", type = "&mut Vec<Crab>", state = "live" },
+  { id = "heal_all.copy", name = "crabs.clone()", type = "IntoIter<Crab>", state = "live" },
+  { id = "heal_all.crab", name = "crab", type = "Crab", value = "阿鉗 10/10", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 12
+note = "第二圈：小殼的複本補到 8/8，上一圈補好的阿鉗複本已經被丟掉"
+heap = [
+  { id = "h1", type = "Vec<Crab>", value = "[阿鉗 3/10, 小殼 5/8]", state = "live" },
+  { id = "h2", type = "Vec<Crab>（複本）", value = "[（已取出）, （已取出）]", state = "live" },
+]
+pointers = [
+  { from = "main.crabs", to = "h1", kind = "own" },
+  { from = "heal_all.crabs", to = "main.crabs", kind = "mut" },
+  { from = "heal_all.copy", to = "h2", kind = "own" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.crabs", name = "crabs", type = "Vec<Crab>", state = "live" },
+]
+
+[[memory_snapshots.frames]]
+id = "heal_all"
+fn = "heal_all"
+vars = [
+  { id = "heal_all.crabs", name = "crabs", type = "&mut Vec<Crab>", state = "live" },
+  { id = "heal_all.copy", name = "crabs.clone()", type = "IntoIter<Crab>", state = "live" },
+  { id = "heal_all.crab", name = "crab", type = "Crab", value = "小殼 8/8", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 14
+note = "heal_all 結束：複本連同補好的血量一起被釋放；main 手上的螃蟹還是 3/10、5/8，沒有任何錯誤訊息"
+error = { target = "h1" }
+heap = [
+  { id = "h1", type = "Vec<Crab>", value = "[阿鉗 3/10, 小殼 5/8]", state = "live" },
+  { id = "h2", type = "Vec<Crab>（複本）", value = "（已釋放）", state = "freed" },
+]
+pointers = [
+  { from = "main.crabs", to = "h1", kind = "own" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.crabs", name = "crabs", type = "Vec<Crab>", state = "live" },
+]
+
+[[memory_snapshots.frames]]
+id = "heal_all"
+fn = "heal_all"
+vars = [
+  { id = "heal_all.crabs", name = "crabs", type = "&mut Vec<Crab>", state = "dropped" },
+  { id = "heal_all.copy", name = "crabs.clone()", type = "IntoIter<Crab>", state = "dropped" },
+  { id = "heal_all.crab", name = "crab", type = "Crab", value = "小殼 8/8", state = "dropped" },
+]
+
+[[memory_snapshots]]
+line = 12
+note = "（修正後）改用 `iter_mut()`：`crab` 是 `&mut Crab`，直接指向 `h1` 裡的阿鉗，heap 上只有一個 Vec"
+heap = [
+  { id = "h1", type = "Vec<Crab>", value = "[阿鉗 10/10, 小殼 5/8]", state = "live" },
+]
+pointers = [
+  { from = "main.crabs", to = "h1", kind = "own" },
+  { from = "heal_all.crabs", to = "main.crabs", kind = "mut" },
+  { from = "heal_all.crab", to = "h1", kind = "mut" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.crabs", name = "crabs", type = "Vec<Crab>", state = "live" },
+]
+
+[[memory_snapshots.frames]]
+id = "heal_all"
+fn = "heal_all"
+vars = [
+  { id = "heal_all.crabs", name = "crabs", type = "&mut Vec<Crab>", state = "live" },
+  { id = "heal_all.crab", name = "crab", type = "&mut Crab", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 22
+note = "（修正後）回到 main：兩隻螃蟹都補滿了，10/10、8/8"
+heap = [
+  { id = "h1", type = "Vec<Crab>", value = "[阿鉗 10/10, 小殼 8/8]", state = "live" },
+]
+pointers = [
+  { from = "main.crabs", to = "h1", kind = "own" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.crabs", name = "crabs", type = "Vec<Crab>", state = "live" },
+]

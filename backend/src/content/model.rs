@@ -15,6 +15,7 @@ pub enum LevelKind {
 pub enum LevelVisual {
     Grid,
     Memory,
+    Timeline,
     None,
 }
 

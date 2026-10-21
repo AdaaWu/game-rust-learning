@@ -1,0 +1,280 @@
+id = "41-error-ladder"
+chapter = 10
+order = 41
+title = "錯誤的梯子"
+kind = "build"
+visual = "memory"
+
+story = """
+塔的第二層守門員遞給我一張爬塔計畫，上面寫著「2,三」。
+我一看就懂，可是讀計畫的程式只會喊「錯了」，說不出錯在哪一層、為什麼錯。
+守門員說：錯誤要像梯子，一格一格往上交代清楚，最上面的人才知道源頭在哪。
+幫我把每一層的錯誤都接上梯子吧。
+"""
+
+concept = """
+## 自訂錯誤型別
+
+- 用 `enum` 列出這一層可能出的錯：`FloorError::BadNumber(ParseIntError)`、`FloorError::Missing`
+- 錯誤要能印給人看：實作 `fmt::Display`
+- 錯誤要能被當成「一般的錯誤」使用：實作 `std::error::Error`（需要先有 `Debug` 和 `Display`）
+
+## source()：錯誤的源頭
+
+- `Error::source()` 回傳「是誰造成我」：`BadNumber` 的源頭是裡面的 `ParseIntError`
+- 外層一路呼叫 `source()`，就能把整條錯誤鏈印出來（main 裡的 `while let` 就是在做這件事）
+- 慣例：`Display` 只講這一層發生什麼事，細節交給 `source()`，避免同一句話印兩次
+
+## From 與 ?：錯誤自動往上轉
+
+- `?` 遇到 `Err(e)` 時，會先呼叫 `From::from(e)` 轉成函式宣告的錯誤型別，再 `return`
+- 兩層 `From`：`ParseIntError → FloorError`、`FloorError → ClimbError`，`?` 一路往上包
+- 每包一層，舊錯誤就成為新錯誤的 `source()`
+
+## Box<dyn Error>：應用層什麼錯都收
+
+- `Box<dyn Error>`：把任何實作 `Error` 的值搬到 heap，只留一個胖指標（資料位址 + vtable）
+- 標準庫已經提供 `impl From<E: Error> for Box<dyn Error>`，`climb(plan)?` 直接就能轉
+- 連字串也能轉：`Err("計畫是空的".into())`
+- `downcast_ref::<ClimbError>()`：從 `dyn Error` 取回原本的型別；型別不對回傳 `None`
+
+## 取捨：具體型別 vs Box<dyn Error>
+
+- 函式庫層用具體 enum：呼叫者可以 `match` 每一種錯，編譯器會檢查有沒有漏
+- 應用層用 `Box<dyn Error>`：省去替每種組合寫 enum，代價是要 `downcast_ref` 才能分辨
+- 全部轉成 `String` 最省事，但錯誤種類和源頭都消失了，上層再也無法判斷要不要重試或改走備案
+"""
+
+hints = [
+  "先看記憶體圖：錯誤在哪一層產生？每經過一個 ?，外面多包了哪一層？",
+  "Display 用 match self 每個變體 write! 一句話；source 用 match 回傳 Some(裡面的錯誤) 或 None",
+  "From 只要回答一件事：收到下一層的錯誤，要包進自己的哪個變體？read_floor 會遇到三種輸入：空白、不是數字、正常數字；哪一種可以直接交給 ? 自動轉換？",
+  "climb 要先把計畫切成一段一段：哪個 str 方法能照逗號切開？每段讀出樓層數後還要擋什麼？run 交給 climb 之前要先擋哪一種計畫，climb 的錯誤又要怎麼變成 Box<dyn Error>？",
+]
+
+[[memory_snapshots]]
+line = 82
+note = "main 輪到第二份計畫 `\"2,三\"`，交給 `run`"
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.plan", name = "plan", type = "&str", value = "\"2,三\"", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 77
+note = "`run` 確認計畫不是空的，交給 `climb(plan)?`"
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.plan", name = "plan", type = "&str", value = "\"2,三\"", state = "live" },
+]
+[[memory_snapshots.frames]]
+id = "run"
+fn = "run"
+vars = [
+  { id = "run.plan", name = "plan", type = "&str", value = "\"2,三\"", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 69
+note = "`climb` 爬完第一段 2 層，`cmds` 已有 2 個指令；第二段 `\"三\"` 交給 `read_floor`"
+heap = [
+  { id = "h1", type = "Vec<String>", value = "[\"MOVE UP\", \"MOVE UP\"]", state = "live" },
+]
+pointers = [
+  { from = "climb.cmds", to = "h1", kind = "own" },
+]
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.plan", name = "plan", type = "&str", value = "\"2,三\"", state = "live" },
+]
+[[memory_snapshots.frames]]
+id = "run"
+fn = "run"
+vars = [
+  { id = "run.plan", name = "plan", type = "&str", value = "\"2,三\"", state = "live" },
+]
+[[memory_snapshots.frames]]
+id = "climb"
+fn = "climb"
+vars = [
+  { id = "climb.cmds", name = "cmds", type = "Vec<String>", state = "live" },
+  { id = "climb.part", name = "part", type = "&str", value = "\"三\"", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 63
+note = "最內層：`\"三\".parse::<u32>()` 失敗，產生 `ParseIntError`，錯誤從這裡誕生"
+error = { target = "read_floor.parsed" }
+heap = [
+  { id = "h1", type = "Vec<String>", value = "[\"MOVE UP\", \"MOVE UP\"]", state = "live" },
+]
+pointers = [
+  { from = "climb.cmds", to = "h1", kind = "own" },
+]
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.plan", name = "plan", type = "&str", value = "\"2,三\"", state = "live" },
+]
+[[memory_snapshots.frames]]
+id = "run"
+fn = "run"
+vars = [
+  { id = "run.plan", name = "plan", type = "&str", value = "\"2,三\"", state = "live" },
+]
+[[memory_snapshots.frames]]
+id = "climb"
+fn = "climb"
+vars = [
+  { id = "climb.cmds", name = "cmds", type = "Vec<String>", state = "live" },
+  { id = "climb.part", name = "part", type = "&str", value = "\"三\"", state = "live" },
+]
+[[memory_snapshots.frames]]
+id = "read_floor"
+fn = "read_floor"
+vars = [
+  { id = "read_floor.s", name = "s", type = "&str", value = "\"三\"", state = "live" },
+  { id = "read_floor.parsed", name = "parse 結果", type = "Result<u32, ParseIntError>", value = "Err(ParseIntError { kind: InvalidDigit })", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 63
+note = "`?` 呼叫 `From<ParseIntError> for FloorError`，包成 `BadNumber` 後立刻 return"
+heap = [
+  { id = "h1", type = "Vec<String>", value = "[\"MOVE UP\", \"MOVE UP\"]", state = "live" },
+]
+pointers = [
+  { from = "climb.cmds", to = "h1", kind = "own" },
+]
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.plan", name = "plan", type = "&str", value = "\"2,三\"", state = "live" },
+]
+[[memory_snapshots.frames]]
+id = "run"
+fn = "run"
+vars = [
+  { id = "run.plan", name = "plan", type = "&str", value = "\"2,三\"", state = "live" },
+]
+[[memory_snapshots.frames]]
+id = "climb"
+fn = "climb"
+vars = [
+  { id = "climb.cmds", name = "cmds", type = "Vec<String>", state = "live" },
+  { id = "climb.part", name = "part", type = "&str", value = "\"三\"", state = "live" },
+]
+[[memory_snapshots.frames]]
+id = "read_floor"
+fn = "read_floor"
+vars = [
+  { id = "read_floor.ret", name = "回傳值", type = "Result<u32, FloorError>", value = "Err(BadNumber(InvalidDigit))", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 69
+note = "回到 `climb`：`?` 再呼叫 `From<FloorError> for ClimbError` 包一層；提早 return，`cmds` 被 drop、heap 釋放"
+heap = [
+  { id = "h1", type = "Vec<String>", value = "[\"MOVE UP\", \"MOVE UP\"]", state = "freed" },
+]
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.plan", name = "plan", type = "&str", value = "\"2,三\"", state = "live" },
+]
+[[memory_snapshots.frames]]
+id = "run"
+fn = "run"
+vars = [
+  { id = "run.plan", name = "plan", type = "&str", value = "\"2,三\"", state = "live" },
+]
+[[memory_snapshots.frames]]
+id = "climb"
+fn = "climb"
+vars = [
+  { id = "climb.cmds", name = "cmds", type = "Vec<String>", state = "dropped" },
+  { id = "climb.ret", name = "回傳值", type = "Result<Vec<String>, ClimbError>", value = "Err(Floor(BadNumber(InvalidDigit)))", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 77
+note = "回到 `run`：`climb(plan)?` 把 `ClimbError` 轉成 `Box<dyn Error>`，錯誤本體搬到 heap，stack 上只留胖指標（資料位址 + vtable）"
+heap = [
+  { id = "h2", type = "ClimbError", value = "Floor(BadNumber(ParseIntError { kind: InvalidDigit }))", state = "live" },
+]
+pointers = [
+  { from = "run.ret", to = "h2", kind = "own" },
+]
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.plan", name = "plan", type = "&str", value = "\"2,三\"", state = "live" },
+]
+[[memory_snapshots.frames]]
+id = "run"
+fn = "run"
+vars = [
+  { id = "run.plan", name = "plan", type = "&str", value = "\"2,三\"", state = "live" },
+  { id = "run.ret", name = "回傳值", type = "Result<_, Box<dyn Error>>", value = "Err(Box)", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 87
+note = "main 拿到 `e`，印出最外層訊息；`e.source()` 借出裡面的 `FloorError`（它就住在同一塊 heap 裡）"
+heap = [
+  { id = "h2", type = "ClimbError", value = "Floor(BadNumber(ParseIntError { kind: InvalidDigit }))", state = "live" },
+]
+pointers = [
+  { from = "main.e", to = "h2", kind = "own" },
+  { from = "main.cause", to = "h2", kind = "shared" },
+]
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.plan", name = "plan", type = "&str", value = "\"2,三\"", state = "live" },
+  { id = "main.e", name = "e", type = "Box<dyn Error>", state = "live" },
+  { id = "main.cause", name = "cause", type = "Option<&dyn Error>", value = "Some(FloorError::BadNumber)", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 90
+note = "再呼叫一次 `source()`，梯子走到最底層的 `ParseIntError`；它的 `source()` 是 `None`，迴圈結束"
+heap = [
+  { id = "h2", type = "ClimbError", value = "Floor(BadNumber(ParseIntError { kind: InvalidDigit }))", state = "live" },
+]
+pointers = [
+  { from = "main.e", to = "h2", kind = "own" },
+  { from = "main.cause", to = "h2", kind = "shared" },
+]
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.plan", name = "plan", type = "&str", value = "\"2,三\"", state = "live" },
+  { id = "main.e", name = "e", type = "Box<dyn Error>", state = "live" },
+  { id = "main.cause", name = "cause", type = "Option<&dyn Error>", value = "Some(ParseIntError)", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 82
+note = "這一輪結束，`e` 被 drop，整條錯誤鏈跟著 heap 一起釋放"
+heap = [
+  { id = "h2", type = "ClimbError", value = "Floor(BadNumber(ParseIntError { kind: InvalidDigit }))", state = "freed" },
+]
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.e", name = "e", type = "Box<dyn Error>", state = "dropped" },
+]

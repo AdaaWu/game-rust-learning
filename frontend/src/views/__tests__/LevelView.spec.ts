@@ -7,6 +7,8 @@ import type { Router } from 'vue-router'
 import type { LevelDetail } from '../../api/types'
 import { chapters, clearRoute, diag, gridLevel, levels, memoryLevel, runCompileError, runOk, submitResult } from '../../test/fixtures'
 import { PROGRESS_KEY } from '../../domain/progress'
+import { timelineLevel, tl33Starter } from '../../test/timelineFixtures'
+import type { RunResponse } from '../../api/types'
 
 const api = vi.hoisted(() => ({
   listLevels: vi.fn(),
@@ -664,6 +666,115 @@ describe('F7 LevelView 關卡頁', () => {
       await flushPromises()
       expect(api.run).toHaveBeenCalledTimes(1)
       expect(api.submit).not.toHaveBeenCalled()
+    })
+  })
+  describe('S2-3 timeline 關卡', () => {
+    const highlight = (w: VueWrapper) => w.get('[data-testid="editor"]').attributes('data-highlight-line')
+    const deadlockRun = (): RunResponse => ({
+      ...runOk(tl33Starter),
+      status: 'timeout',
+      execution: { ...runOk(tl33Starter).execution!, exit_code: null, timed_out: true },
+    })
+    const playToEnd = async () => {
+      await vi.advanceTimersByTimeAsync(600_000)
+      await flushPromises()
+    }
+
+    beforeEach(() => {
+      details(timelineLevel())
+    })
+
+    it('visual = timeline 顯示 TimelineView，不顯示 GridWorld、MemoryView', async () => {
+      const { w } = await openLevel(ID)
+      expect(w.find('[data-testid="timeline-view"]').exists()).toBe(true)
+      expect(w.find('[data-testid="grid-world"]').exists()).toBe(false)
+      expect(w.find('[data-testid="mem-caption"]').exists()).toBe(false)
+    })
+
+    it('Run 逾時（33 starter）：時間軸自動播放，主控台隱藏 @tl| 行並顯示隱藏行數', async () => {
+      api.run.mockResolvedValue({ ok: true, data: deadlockRun() })
+      const { w } = await openLevel(ID)
+      await btn(w, 'run').trigger('click')
+      await flushPromises()
+      const timeline = w.find('[data-testid="timeline-view"]')
+      expect(timeline.exists()).toBe(true)
+      expect(timeline.find('[data-testid="step-label"]').exists() && timeline.get('[data-testid="step-label"]').text()).toBe('第 1 / 14 步')
+      const consoleText = w.get('[data-testid="console"]').text()
+      expect(consoleText).not.toContain('@tl|')
+      expect(consoleText).toContain('已隱藏 14 行時間軸事件')
+      expect(consoleText).toContain('分身 0 站上窄橋 0')
+    })
+
+    it('時間軸 line-change 接到編輯器高亮：死鎖最後一步高亮循環第一條泳道的等待行', async () => {
+      api.run.mockResolvedValue({ ok: true, data: deadlockRun() })
+      const { w } = await openLevel(ID)
+      expect(highlight(w)).toBe('')
+      await btn(w, 'run').trigger('click')
+      await flushPromises()
+      expect(highlight(w)).toBe('58')
+      await playToEnd()
+      expect(highlight(w)).toBe('39')
+    })
+
+    it('Run 之後修改程式碼：可視化區提示「程式碼已修改，行號高亮僅供參考」', async () => {
+      api.run.mockResolvedValue({ ok: true, data: deadlockRun() })
+      const { w } = await openLevel(ID)
+      await btn(w, 'run').trigger('click')
+      await flushPromises()
+      expect(w.get('[data-testid="visual-panel"]').text()).not.toContain('程式碼已修改，行號高亮僅供參考')
+      await w.get('[data-testid="editor"]').setValue('fn main() { changed }')
+      expect(w.find('[data-testid="timeline-view"]').exists()).toBe(true)
+      expect(w.get('[data-testid="visual-panel"]').text()).toContain('程式碼已修改，行號高亮僅供參考')
+    })
+
+    it('Submit 不驅動時間軸：還原上次 Run 的最後一步，不重播', async () => {
+      api.run.mockResolvedValue({ ok: true, data: deadlockRun() })
+      api.submit.mockResolvedValue({ ok: true, data: submitResult('timeout', [{ name: 'great_migration_reaches_the_tablet', status: 'not_run', message: null }]) })
+      const { w } = await openLevel(ID)
+      await btn(w, 'run').trigger('click')
+      await flushPromises()
+      await playToEnd()
+      await btn(w, 'submit').trigger('click')
+      await flushPromises()
+      const timeline = w.find('[data-testid="timeline-view"]')
+      expect(timeline.exists()).toBe(true)
+      expect(timeline.find('[data-testid="step-label"]').exists() && timeline.get('[data-testid="step-label"]').text()).toBe('第 14 / 14 步')
+      expect(timeline.find('button[aria-label="暫停"]').exists()).toBe(false)
+    })
+
+    it('同一份程式碼連續 Run 兩次結果相同，第二次也從第 1 步重播', async () => {
+      api.run.mockResolvedValue({ ok: true, data: deadlockRun() })
+      const { w } = await openLevel(ID)
+      await btn(w, 'run').trigger('click')
+      await flushPromises()
+      await playToEnd()
+      expect(w.get('[data-testid="step-label"]').text()).toBe('第 14 / 14 步')
+      await btn(w, 'run').trigger('click')
+      await flushPromises()
+      expect(w.get('[data-testid="step-label"]').text()).toBe('第 1 / 14 步')
+      expect(w.find('button[aria-label="暫停"]').exists()).toBe(true)
+    })
+
+    it('Run 請求失敗：還原上次 Run 的最後一步，不重播', async () => {
+      api.run.mockResolvedValueOnce({ ok: true, data: deadlockRun() })
+      api.run.mockResolvedValueOnce({ ok: false, failure: { kind: 'network_error', status: null, code: null, message: null } })
+      const { w } = await openLevel(ID)
+      await btn(w, 'run').trigger('click')
+      await flushPromises()
+      await playToEnd()
+      await btn(w, 'run').trigger('click')
+      await flushPromises()
+      expect(w.get('[data-testid="step-label"]').text()).toBe('第 14 / 14 步')
+      expect(w.find('button[aria-label="暫停"]').exists()).toBe(false)
+    })
+
+    it('grid 關卡主控台不隱藏 @tl| 行', async () => {
+      details(gridLevel())
+      api.run.mockResolvedValue({ ok: true, data: runOk('@tl|start|1|甲|\nMOVE DOWN\n') })
+      const { w } = await openLevel(ID)
+      await btn(w, 'run').trigger('click')
+      await flushPromises()
+      expect(w.get('[data-testid="console"]').text()).toContain('@tl|start|1|甲|')
     })
   })
 })

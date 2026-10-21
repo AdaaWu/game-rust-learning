@@ -1,0 +1,62 @@
+id = "52-boss-labyrinth-heart"
+chapter = 11
+order = 52
+title = "BOSS：迷宮之心"
+kind = "debug"
+visual = "grid"
+
+story = """
+迷宮最深處，心跳聲咚、咚地響著，那裡就是迷宮之心。
+海鷗先飛一趟探路，再和我接力穿過迷宮，最後由我爬上去撿齊四顆寶石。
+可是我一出發就撞牆，修好一處，又在別的地方卡住。
+老龍蝦說：這裡用到你在迷宮學過的每一個 trait，一次修一個，每修一個就再 Run 一次。
+"""
+
+concept = """
+## 本關綜合
+
+- 自訂 `Iterator`：`Heartbeat` 的 `next` 決定「第一拍是哪一拍」
+- 關聯型別與運算子：`impl Add<Offset> for Pos { type Output = Pos }`
+- trait object：`march` 透過 `Box<dyn Walker>` 呼叫 `stride()`
+- `Display`：`o.to_string()` 唸出指令
+- closure：`leg` 裡的 `on_gem` 判斷腳下有沒有寶石
+
+## 固有方法會遮蔽 trait 方法
+
+- 型別上同時有固有方法 `impl Seagull { fn stride() }` 和 trait 方法 `impl Walker for Seagull { fn stride() }`
+- `gull.stride()`：方法解析**先找固有方法**，找到就用，不會去看 trait
+- `w.stride()`（`w: &dyn Walker`）：只看得到 trait，走 vtable
+- 結果：同一隻海鷗，直接呼叫和透過 `dyn` 呼叫的答案不一樣，編譯器不會警告
+- 修法：刪掉多餘的固有方法；真的要兩個都留時，用 `Walker::stride(&gull)` 明確指定
+
+## next 的順序
+
+- `next` 要回傳「這一拍」，再前進到下一拍
+- 先 `+= 1` 再取值：第一拍永遠被跳過，循環整個錯開一格
+
+## Add 的方向
+
+- 地圖的 y **往下變大**，`DOWN` 是 `dy = 1`
+- `y: self.y - o.dy` 把上下顛倒：Ferris 實際走的路是對的（指令來自 `Display`），但**自己以為的位置**錯了，所以腳下有寶石也不撿
+
+## Debug 心法：一次修一個
+
+- 這關的 bug 會互相遮蔽：前一個沒修好，後一個根本還沒機會發生
+- 每修一個就 Run 一次，看 Ferris 這次卡在哪裡、症狀有沒有變
+- Submit 時測試也照順序檢查：前一道關卡沒過，後面的檢查不會開始
+"""
+
+hints = [
+  "先 Run：Ferris 的第一步就撞牆了。Heartbeat 的第一拍應該是 pattern 的哪一格？next 現在回傳的是哪一格？",
+  "修好第一拍後，海鷗第一段只飛了一半。route 裡的 gull.stride() 和 march 裡的 w.stride() 呼叫到的是同一個方法嗎？",
+  "最後 Ferris 走對了路，卻沒撿到後面的寶石：它以為自己在哪裡？看看 Add 裡 y 是怎麼算的",
+  "還沒過就逐一回頭對照：next 是先取這一拍、還是先把拍數加 1？Seagull 身上是不是有兩個叫 stride 的方法，直接呼叫時誰會被優先選中？Add 算 y 時有沒有用到位移的 dy？",
+]
+
+[grid]
+width  = 8
+height = 6
+start  = [0, 0]
+goal   = [7, 3]
+walls  = [[3, 0], [0, 1], [1, 1], [3, 1], [1, 2], [4, 2], [2, 3], [6, 3], [4, 4], [3, 5], [7, 5]]
+gems   = [[2, 0], [3, 3], [5, 5], [7, 4]]

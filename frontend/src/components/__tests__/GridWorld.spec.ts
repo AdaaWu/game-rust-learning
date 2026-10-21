@@ -263,7 +263,8 @@ describe('F4 GridWorld', () => {
       await playToEnd(w)
       expect(stepLabel(w)).toBe('第 1000 / 1000 步')
       expect(message(w)).toBe('指令超過 1,000 步，後面的不播放了')
-    })
+      // 逐步播放 1000 步，高負載下會超過預設 5 秒
+    }, 30_000)
 
     it.each([
       ['timeout', '時間到'],

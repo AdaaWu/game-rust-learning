@@ -7,7 +7,7 @@ Feature: 執行玩家程式（POST /api/levels/:id/run）
   編譯失敗、panic、超時都是正常的判題結果，回 200
 
   Background:
-    Given 後端以 content/ 全部 33 關的關卡內容啟動
+    Given 後端以 content/ 全部 67 關的關卡內容啟動
 
   # ---------- 成功 ----------
 

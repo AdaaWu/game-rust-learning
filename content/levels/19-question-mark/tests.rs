@@ -5,9 +5,9 @@ fn grid_from(map: &[&str]) -> Grid {
         height: map.len() as i32,
         start: (0, 0),
         goal: (0, 0),
-        walls: vec![],
-        gems: vec![],
-        doors: vec![],
+        walls: ::std::vec![],
+        gems: ::std::vec![],
+        doors: ::std::vec![],
     };
     for (y, line) in map.iter().enumerate() {
         for (x, ch) in line.chars().enumerate() {
@@ -40,11 +40,11 @@ fn gem_up_left() {
 #[test]
 fn island_without_gem() {
     let map = ["F....", "....E"];
-    assert!(plan(&map).is_none(), "沒有寶石時應該回傳 None");
+    ::std::assert!(plan(&map).is_none(), "沒有寶石時應該回傳 None");
 }
 
 #[test]
 fn island_without_ferris() {
     let map = ["....G", "E...."];
-    assert!(plan(&map).is_none(), "地圖上沒有 Ferris 時應該回傳 None");
+    ::std::assert!(plan(&map).is_none(), "地圖上沒有 Ferris 時應該回傳 None");
 }

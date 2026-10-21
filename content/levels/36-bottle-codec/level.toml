@@ -1,0 +1,58 @@
+id = "36-bottle-codec"
+chapter = 9
+order = 36
+title = "瓶中密碼機"
+kind = "fix-compile"
+visual = "grid"
+
+story = """
+海上漂來一個瓶子，裡面的信全是速記：`R R * D D`……
+上一任管帳的螃蟹寫好了兩個翻譯方法，可是 `route` 用的是另一套說法，編譯器一行都不肯過。
+我想要一台雙向翻譯機：速記能變成 `Step`，`Step` 也能印成我看得懂的指令。
+翻好了，我就照著信上的路線去撿寶石。
+"""
+
+concept = """
+## 讀懂這兩個錯誤
+
+- `the trait bound Step: FromStr is not satisfied`（**E0277**）：`parse::<Step>()` 只認得 `FromStr` 這個 trait，`Step` 沒有實作它
+- `Step doesn't implement std::fmt::Display`（**E0277**）：`{}` 只認得 `Display`
+- 固有方法（`impl Step { fn from_text .. }`）名字取得再好，標準庫也不知道它的存在
+
+## FromStr：字串 → 型別
+
+- `impl FromStr for Step { type Err = StepError; fn from_str(s: &str) -> Result<Self, Self::Err> }`
+- `type Err` 是**關聯型別**（associated type）：每個實作者自己決定「解析失敗」長什麼樣
+- 實作之後 `"R".parse::<Step>()` 就會呼叫你的 `from_str`；`str::parse` 本身只是轉呼叫 `FromStr`
+
+## Display：型別 → 給人看的字串
+
+- `impl fmt::Display for Step { fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result }`
+- 用 `write!(f, "...")` 把文字寫進 `Formatter`，不是回傳 `String`
+  - 好處：`println!` 可以直接寫進 stdout，不用先配置一個暫時字串
+- 免費拿到 `to_string()`：標準庫替所有 `T: Display` 實作了 `ToString`
+
+## Display 與 Debug
+
+- `Debug`（`{:?}`）：給開發者看，通常 `#[derive(Debug)]` 自動產生
+- `Display`（`{}`）：給使用者看，**不能 derive**，要自己決定格式
+
+## 為什麼要搬進 trait
+
+- 固有方法只有知道名字的人會呼叫；trait 是約定，標準庫、別人的函式都能透過 `T: FromStr`、`T: Display` 使用你的型別
+- 代價：方法名稱與簽名由 trait 規定，不能自己改
+"""
+
+hints = [
+  "兩個錯誤都說 Step 少了某個 trait，parse 和 {} 各自需要哪一個？",
+  "翻譯邏輯其實已經寫好了：from_text 的內容可以整段搬進 impl FromStr for Step 的 from_str，別忘了 type Err",
+  "Display 的 fmt 不回傳 String：先 match 出要印的文字，再用 write! 寫進 f",
+]
+
+[grid]
+width  = 7
+height = 5
+start  = [0, 0]
+goal   = [6, 4]
+walls  = [[0, 2], [1, 1], [3, 0], [3, 1], [5, 2], [5, 3], [2, 3], [3, 3], [4, 4]]
+gems   = [[2, 0], [4, 2], [6, 1]]
