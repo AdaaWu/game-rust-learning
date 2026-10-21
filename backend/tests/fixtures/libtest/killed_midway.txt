@@ -1,0 +1,5 @@
+
+running 4 tests
+test __quest_hidden_tests::a_first ... ok
+test __quest_hidden_tests::b_second ... ok
+test __quest_hidden_tests::c_hangs ... 

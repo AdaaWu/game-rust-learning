@@ -1,0 +1,17 @@
+id = "09-late-grid"
+chapter = 1
+order = 9
+title = "開門撿寶"
+kind = "fix-compile"
+visual = "grid"
+story = "前面有一扇門。"
+concept = "## 門\n\n- OPEN 打開門"
+
+[grid]
+width = 4
+height = 3
+start = [0, 0]
+goal = [3, 0]
+walls = [[1, 0]]
+gems = [[0, 2]]
+doors = [[3, 1]]

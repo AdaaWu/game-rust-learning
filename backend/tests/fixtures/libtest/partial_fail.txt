@@ -1,0 +1,22 @@
+
+running 3 tests
+test __quest_hidden_tests::all_ones ... ok
+test __quest_hidden_tests::empty_is_zero ... ok
+test __quest_hidden_tests::sums_three ... FAILED
+
+failures:
+
+---- __quest_hidden_tests::sums_three stdout ----
+
+thread '__quest_hidden_tests::sums_three' (194) panicked at /tmp/main.rs:15:5:
+assertion `left == right` failed: 總和不對
+  left: 14
+ right: 6
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    __quest_hidden_tests::sums_three
+
+test result: FAILED. 2 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

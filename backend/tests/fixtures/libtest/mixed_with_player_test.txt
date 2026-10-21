@@ -1,0 +1,38 @@
+
+running 6 tests
+test __quest_hidden_tests::alpha_passes ... ok
+test __quest_hidden_tests::beta_ignored ... ignored
+test __quest_hidden_tests::gamma_multiline ... FAILED
+test __quest_hidden_tests::mid_plain_panic ... FAILED
+test __quest_hidden_tests::zeta_assert_msg ... FAILED
+test tests::mine ... ok
+
+failures:
+
+---- __quest_hidden_tests::gamma_multiline stdout ----
+
+thread '__quest_hidden_tests::gamma_multiline' (197) panicked at /tmp/main.rs:31:5:
+第一行
+第二行
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- __quest_hidden_tests::mid_plain_panic stdout ----
+
+thread '__quest_hidden_tests::mid_plain_panic' (198) panicked at /tmp/main.rs:22:5:
+背包破了
+
+---- __quest_hidden_tests::zeta_assert_msg stdout ----
+
+thread '__quest_hidden_tests::zeta_assert_msg' (199) panicked at /tmp/main.rs:14:5:
+assertion `left == right` failed: 海星數量不對
+  left: 2
+ right: 3
+
+
+failures:
+    __quest_hidden_tests::gamma_multiline
+    __quest_hidden_tests::mid_plain_panic
+    __quest_hidden_tests::zeta_assert_msg
+
+test result: FAILED. 2 passed; 3 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

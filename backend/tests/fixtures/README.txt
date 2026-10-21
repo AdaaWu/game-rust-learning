@@ -1,0 +1,12 @@
+fixtures 來源
+- content/：測試用小型關卡，不依賴 repo 根目錄的 content/
+- rustc/、libtest/：rust-quest-runner:dev 內 rustc 1.99.1 真實輸出
+  - 重產：bash tests/fixtures/sources/gen.sh（需要 Docker）
+  - 指令依 architecture v1.3：Run 與 Submit 都加 -A dead_code，Submit 再加 --test
+  - Submit 合併檔依 §3.7：缺結尾換行才補、隱藏模組開頭五行（含 #[allow(unused_imports)]）
+  - 原始碼：sources/run/*.rs 直接編譯；sources/submit/ 與 content/levels/02-plain-sum 由 gen.sh 合併後編譯
+  - libtest/killed_midway.txt 由 timeout -s KILL 中斷
+- 合成（gen.sh 由真實輸出改寫）
+  - rustc/synthetic_non_json_line.jsonl：真實 E0382 行之間插入一行連結器錯誤原文
+  - rustc/synthetic_ice_level.jsonl：真實語法錯誤的 level 改為 internal compiler error
+  - libtest/partial_fail_no_thread_id.txt：去掉 thread id 的舊版前綴

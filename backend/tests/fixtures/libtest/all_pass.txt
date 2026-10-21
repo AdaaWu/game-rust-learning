@@ -1,0 +1,8 @@
+
+running 3 tests
+test __quest_hidden_tests::all_ones ... ok
+test __quest_hidden_tests::empty_is_zero ... ok
+test __quest_hidden_tests::sums_three ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

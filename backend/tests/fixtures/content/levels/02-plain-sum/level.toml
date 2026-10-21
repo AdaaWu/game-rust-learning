@@ -1,0 +1,9 @@
+id = "02-plain-sum"
+chapter = 2
+order = 2
+title = "數貝殼"
+kind = "debug"
+visual = "none"
+story = "我想數清楚貝殼。"
+concept = "## 迭代\n\n- iter().sum()"
+hints = ["看看 map 做了什麼"]

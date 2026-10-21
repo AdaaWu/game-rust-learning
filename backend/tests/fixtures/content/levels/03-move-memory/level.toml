@@ -1,0 +1,37 @@
+id = "03-move-memory"
+chapter = 3
+order = 3
+title = "交出去的背包"
+kind = "fix-compile"
+visual = "memory"
+story = "我把背包交給海鷗。"
+concept = "## Move\n\n- 擁有權移動"
+
+[[memory_snapshots]]
+line = 8
+note = "bag 擁有 heap 上的三個字串"
+heap = [
+  { id = "h1", type = "[String; 3]", value = "珍珠 | 貝殼 | 海星", state = "live" },
+]
+pointers = [
+  { from = "report.bag", to = "h1", kind = "own" },
+]
+
+[[memory_snapshots.frames]]
+id = "report"
+fn = "report"
+vars = [
+  { id = "report.bag", name = "bag", type = "Vec<String>", value = "len=3 cap=3", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 10
+note = "再讀 bag[0]，編譯器回報 E0382"
+error = { code = "E0382", target = "report.bag" }
+
+[[memory_snapshots.frames]]
+id = "report"
+fn = "report"
+vars = [
+  { id = "report.bag", name = "bag", type = "Vec<String>", state = "moved" },
+]
