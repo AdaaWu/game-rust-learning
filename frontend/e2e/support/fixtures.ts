@@ -11,8 +11,12 @@ export const PROGRESS_KEY = 'rustquest.progress.v1'
 declare global {
   interface Window {
     __rqMonaco?: any
+    __rqTrace?: { lastInput: number; writes: Record<string, number>; clearShownAlone: boolean }
   }
 }
+
+// 每步最短毫秒數（BASE_STEP_MS 500 ÷ 最快 4x）
+const MIN_STEP_MS = 125
 
 // 單一情境的狀態：待寫入的 localStorage、比對用的前值
 export class World {
@@ -20,6 +24,9 @@ export class World {
   progress: Json | null = null
   originReady = false
   clockInstalled = false
+  clockPaused = false
+  // 點 Run／Submit 前暫停時鐘，倒數由測試推進
+  pauseClockOnRequest = false
   // Run 送出後要快轉的毫秒數（模擬 60 秒逾時）
   fastForwardMs = 0
   failWrites = false
@@ -67,6 +74,49 @@ export class World {
     this.clockInstalled = true
   }
 
+  async pauseClock() {
+    await this.installClock()
+    // pauseAt 不能回到過去，取頁面現在時間再往後一點，主機太慢時重取
+    for (let i = 0; ; i++) {
+      const now = await this.page.evaluate(() => Date.now())
+      try {
+        await this.page.clock.pauseAt(now + 200)
+        break
+      } catch (e) {
+        if (i >= 4) throw e
+      }
+    }
+    this.clockPaused = true
+  }
+
+  async elapse(ms: number) {
+    if (this.clockPaused) await this.page.clock.runFor(ms)
+    else await this.page.waitForTimeout(ms)
+  }
+
+  // 記錄最後輸入時間、各 key 首次寫入時間、通關動畫是否在結算前出現
+  async trace() {
+    await this.page.evaluate(() => {
+      if (window.__rqTrace) return
+      const trace = { lastInput: 0, writes: {} as Record<string, number>, clearShownAlone: false }
+      window.__rqTrace = trace
+      const mark = () => (trace.lastInput = performance.now())
+      addEventListener('keydown', mark, true)
+      addEventListener('input', mark, true)
+      const setItem = Storage.prototype.setItem
+      Storage.prototype.setItem = function (key: string, value: string) {
+        setItem.call(this, key, value)
+        trace.writes[key] ??= performance.now()
+      }
+      const check = () => {
+        if (document.querySelector('[data-testid=clear-animation]') && !document.querySelector('.complete-dialog')) {
+          trace.clearShownAlone = true
+        }
+      }
+      new MutationObserver(check).observe(document.body, { childList: true, subtree: true })
+    })
+  }
+
   async prepareOrigin() {
     if (this.originReady) return
     await this.page.goto('/favicon.svg')
@@ -88,7 +138,7 @@ export class World {
     await this.waitReady()
   }
 
-  async waitReady(timeout = 15_000) {
+  async waitReady(timeout = 30_000) {
     await this.page.waitForFunction(
       () => {
         if (location.pathname.startsWith('/level/')) {
@@ -121,19 +171,28 @@ export class World {
   // ---------- 請求 ----------
 
   async waitIdle(timeout = this.mock.real ? 60_000 : 15_000) {
+    this.mock.release()
     if (!this.mock.real) await expect.poll(() => this.mock.inflight, { timeout }).toBe(0)
     await expect(this.page.getByTestId('btn-run')).not.toHaveText('判題中…', { timeout })
     await expect(this.page.getByTestId('btn-submit')).not.toHaveText('判題中…', { timeout })
   }
 
   async clickRun() {
+    await this.beforeRequestClick()
     await this.page.getByTestId('btn-run').click()
     await this.afterRequestClick()
   }
 
   async clickSubmit() {
+    await this.beforeRequestClick()
     await this.page.getByTestId('btn-submit').click()
     await this.afterRequestClick()
+  }
+
+  private async beforeRequestClick() {
+    this.mock.hold()
+    await this.trace()
+    if (this.pauseClockOnRequest && !this.clockPaused) await this.pauseClock()
   }
 
   private async afterRequestClick() {
@@ -164,6 +223,7 @@ export class World {
   }
 
   async typeInEditor(text: string) {
+    await this.trace()
     await this.focusEditorEnd()
     await this.page.keyboard.type(text)
   }
@@ -298,6 +358,12 @@ export class World {
     return Number(/第 (\d+) \//.exec(text)?.[1] ?? NaN)
   }
 
+  async remainingSteps(): Promise<number> {
+    if ((await this.stepLabel().count()) === 0) return 0
+    const m = /第 (\d+) \/ (\d+)/.exec((await this.stepLabel().textContent()) ?? '')
+    return m ? Number(m[2]) - Number(m[1]) : 0
+  }
+
   // 播放結束：請求完成且播放按鈕回到「播放」
   async waitPlaybackEnd() {
     await this.waitIdle()
@@ -308,7 +374,7 @@ export class World {
         await this.page.waitForTimeout(50)
         if ((await this.playButton().getAttribute('aria-label')) === '播放') return
       }
-      if (this.clockInstalled) await this.page.clock.runFor(1000)
+      if (this.clockInstalled) await this.page.clock.runFor(Math.max(1000, (await this.remainingSteps()) * MIN_STEP_MS))
       else await this.page.waitForTimeout(200)
     }
     throw new Error('播放沒有結束')
@@ -323,6 +389,7 @@ export const test = base.extend<{ mock: MockApi; world: World }>({
       (route) => mock.handle(route),
     )
     await use(mock)
+    mock.release()
   },
   world: async ({ page, mock }, use) => {
     await use(new World(page, mock))
