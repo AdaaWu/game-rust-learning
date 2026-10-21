@@ -7,10 +7,10 @@ const NODE_STATE: Record<string, string> = { 可挑戰: 'available', 鎖定: 'lo
 
 // ---------- 通關動畫與結算 ----------
 
+// 動畫只有 1.5 秒，以頁面內紀錄確認曾在結算前出現
 Step('播放通關動畫', async ({ world, page }) => {
   await world.waitIdle()
-  await expect(page.getByTestId('clear-animation')).toBeVisible()
-  await expect(world.completeDialog()).toHaveCount(0)
+  await expect.poll(() => page.evaluate(() => window.__rqTrace?.clearShownAlone ?? false)).toBe(true)
 })
 
 Step(/^通關動畫結束後顯示通關結算 Modal，按鈕有(「.+」)$/, async ({ world, page }, list: string) => {
