@@ -21,21 +21,19 @@ withDefaults(defineProps<{ mood?: FerrisMood; size?: number }>(), {
       <path d="M22 37 C27 39 37 39 42 37" fill="none" stroke="var(--ferris-shade)" />
       <path d="M26 16 L25 10 M38 16 L39 10" fill="none" />
     </g>
+    <circle class="eye-white" cx="25" cy="8" r="5" fill="#fff" stroke="var(--ferris-ink)" stroke-width="2" />
+    <circle class="eye-white" cx="39" cy="8" :r="mood === 'confused' ? 6.5 : 5" fill="#fff" stroke="var(--ferris-ink)" stroke-width="2" />
     <template v-if="mood === 'happy'">
-      <path d="M21 9 Q25 4 29 9 M35 9 Q39 4 43 9" stroke="var(--ferris-ink)" stroke-width="2.4" fill="none" stroke-linecap="round" />
+      <path class="eye-mark" d="M22.5 9.5 Q25 6 27.5 9.5 M36.5 9.5 Q39 6 41.5 9.5" stroke="var(--ferris-eye)" stroke-width="2" fill="none" stroke-linecap="round" />
     </template>
     <template v-else-if="mood === 'dizzy'">
-      <circle cx="25" cy="8" r="5" fill="#fff" stroke="var(--ferris-ink)" stroke-width="2" />
-      <circle cx="39" cy="8" r="5" fill="#fff" stroke="var(--ferris-ink)" stroke-width="2" />
-      <path d="M23 6 L27 10 M27 6 L23 10 M37 6 L41 10 M41 6 L37 10" stroke="var(--ferris-ink)" stroke-width="1.6" stroke-linecap="round" />
+      <path class="eye-mark" d="M23 6 L27 10 M27 6 L23 10 M37 6 L41 10 M41 6 L37 10" stroke="var(--ferris-eye)" stroke-width="1.6" stroke-linecap="round" />
     </template>
     <template v-else>
-      <circle cx="25" cy="8" r="5" fill="#fff" stroke="var(--ferris-ink)" stroke-width="2" />
-      <circle cx="39" cy="8" :r="mood === 'confused' ? 6.5 : 5" fill="#fff" stroke="var(--ferris-ink)" stroke-width="2" />
-      <circle cx="26" cy="9" r="2.3" fill="var(--ferris-eye)" />
-      <circle cx="40" cy="9" r="2.3" fill="var(--ferris-eye)" />
-      <circle cx="27" cy="8" r="0.8" fill="#fff" />
-      <circle cx="41" cy="8" r="0.8" fill="#fff" />
+      <circle class="eye-mark" cx="26" cy="9" r="2.3" fill="var(--ferris-eye)" />
+      <circle class="eye-mark" cx="40" cy="9" r="2.3" fill="var(--ferris-eye)" />
+      <circle class="eye-mark" cx="27" cy="8" r="0.8" fill="#fff" />
+      <circle class="eye-mark" cx="41" cy="8" r="0.8" fill="#fff" />
     </template>
     <ellipse cx="20" cy="31" rx="3.5" ry="2" fill="var(--ferris-blush)" />
     <ellipse cx="44" cy="31" rx="3.5" ry="2" fill="var(--ferris-blush)" />
