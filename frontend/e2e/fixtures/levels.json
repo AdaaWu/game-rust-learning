@@ -1,0 +1,995 @@
+{
+  "list": {
+    "chapters": [
+      {
+        "chapter": 1,
+        "title": "沙灘甦醒"
+      },
+      {
+        "chapter": 2,
+        "title": "潮汐羅盤"
+      },
+      {
+        "chapter": 3,
+        "title": "所有權之海"
+      },
+      {
+        "chapter": 5,
+        "title": "漂流瓶"
+      },
+      {
+        "chapter": 7,
+        "title": "智慧指標洞窟"
+      },
+      {
+        "chapter": 8,
+        "title": "群蟹大遷徙"
+      }
+    ],
+    "levels": [
+      {
+        "id": "01-hello-ferris",
+        "chapter": 1,
+        "order": 1,
+        "title": "第一步",
+        "kind": "build",
+        "visual": "grid"
+      },
+      {
+        "id": "02-mut-matters",
+        "chapter": 1,
+        "order": 2,
+        "title": "黏住的腳",
+        "kind": "fix-compile",
+        "visual": "grid"
+      },
+      {
+        "id": "05-compass-enum",
+        "chapter": 2,
+        "order": 5,
+        "title": "神奇羅盤",
+        "kind": "build",
+        "visual": "grid"
+      },
+      {
+        "id": "09-move-the-gem",
+        "chapter": 3,
+        "order": 9,
+        "title": "交出去的背包",
+        "kind": "fix-compile",
+        "visual": "memory"
+      },
+      {
+        "id": "11-one-writer-rule",
+        "chapter": 3,
+        "order": 11,
+        "title": "一寫多讀",
+        "kind": "fix-compile",
+        "visual": "memory"
+      },
+      {
+        "id": "19-question-mark",
+        "chapter": 5,
+        "order": 19,
+        "title": "沒有寶石的島",
+        "kind": "debug",
+        "visual": "grid"
+      },
+      {
+        "id": "28-refcell-panic",
+        "chapter": 7,
+        "order": 28,
+        "title": "寶物箱卡住了",
+        "kind": "debug",
+        "visual": "memory"
+      },
+      {
+        "id": "31-shared-counter",
+        "chapter": 8,
+        "order": 31,
+        "title": "消失的寶石",
+        "kind": "debug",
+        "visual": "none"
+      }
+    ]
+  },
+  "details": {
+    "01-hello-ferris": {
+      "id": "01-hello-ferris",
+      "chapter": 1,
+      "order": 1,
+      "title": "第一步",
+      "kind": "build",
+      "visual": "grid",
+      "story": "我在沙灘上醒來，殼上還沾著海草。\n遠方的岩縫透出一道光，那應該是通往內陸的出口。\n可是我不知道怎麼走，我只聽得懂你寫的指令，帶我過去好嗎？\n",
+      "concept": "## 函式與回傳值\n\n- `fn route() -> Vec<String>`：`->` 後面是回傳型別\n- 函式最後一行**不加分號**的運算式，就是回傳值\n- `Vec<String>`：可以變長的字串清單\n- `cmds.push(String::from(\"MOVE RIGHT\"))`：往清單尾端加一個指令\n\n## main 與輸出\n\n- `main` 是程式進入點\n- `println!(\"{}\", c)` 把指令印到 stdout，畫面上的 Ferris 會照著動\n",
+      "hints": [
+        "出口在第 2 列最右邊，中間有一排岩石擋住",
+        "先往下走到最底列，再一路往右，最後往上一格",
+        "完整路線：MOVE DOWN 兩次、MOVE RIGHT 四次、MOVE UP 一次"
+      ],
+      "starter": "// 回傳 Ferris 要執行的指令\nfn route() -> Vec<String> {\n    let mut cmds = Vec::new();\n    cmds.push(String::from(\"MOVE DOWN\"));\n    // TODO 繼續加指令，帶 Ferris 走到終點\n    cmds\n}\n\nfn main() {\n    for c in route() {\n        println!(\"{}\", c);\n    }\n}\n",
+      "grid": {
+        "width": 5,
+        "height": 3,
+        "start": [
+          0,
+          0
+        ],
+        "goal": [
+          4,
+          1
+        ],
+        "walls": [
+          [
+            2,
+            0
+          ],
+          [
+            2,
+            1
+          ]
+        ],
+        "gems": [],
+        "doors": []
+      },
+      "memory_snapshots": null
+    },
+    "02-mut-matters": {
+      "id": "02-mut-matters",
+      "chapter": 1,
+      "order": 2,
+      "title": "黏住的腳",
+      "kind": "fix-compile",
+      "visual": "grid",
+      "story": "前方四格有一顆閃亮的寶石，寶石後面就是出口！\n我寫好了「往右走四步、撿起寶石、再走一步」的程式，卻一步也動不了。\n海鷗在旁邊笑：「你的變數被宣告成不能改的啦！」\n",
+      "concept": "## Rust 的變數預設不可變\n\n- `let x = 0;` 之後不能再改 `x`\n- 要改就寫 `let mut x = 0;`\n- 這是刻意的設計：看到 `mut` 就知道「這個值會變」，沒有 `mut` 就能放心它不會被偷改\n\n## 讀懂這兩個錯誤\n\n- **E0384** cannot assign twice to immutable variable：對不可變變數第二次賦值\n- **E0596** cannot borrow as mutable：`push` 需要修改 `Vec`，但它不是 `mut`\n- 編譯器的 `help:` 那一行通常直接告訴你要加在哪裡\n",
+      "hints": [
+        "看編譯錯誤裡的變數名稱，有哪兩個變數後來被修改了？",
+        "steps 會 += 1，cmds 會 push，兩個都需要能被修改",
+        "把 let steps 改成 let mut steps，把 let cmds 改成 let mut cmds"
+      ],
+      "starter": "// 往右走四步撿起寶石，再走一步到終點\nfn route() -> Vec<String> {\n    let cmds = Vec::new();\n    let steps = 0;\n    while steps < 4 {\n        cmds.push(String::from(\"MOVE RIGHT\"));\n        steps += 1;\n    }\n    cmds.push(String::from(\"PICK\"));\n    cmds.push(String::from(\"MOVE RIGHT\"));\n    cmds\n}\n\nfn main() {\n    for c in route() {\n        println!(\"{}\", c);\n    }\n}\n",
+      "grid": {
+        "width": 6,
+        "height": 2,
+        "start": [
+          0,
+          0
+        ],
+        "goal": [
+          5,
+          0
+        ],
+        "walls": [
+          [
+            0,
+            1
+          ],
+          [
+            1,
+            1
+          ],
+          [
+            2,
+            1
+          ],
+          [
+            3,
+            1
+          ],
+          [
+            4,
+            1
+          ],
+          [
+            5,
+            1
+          ]
+        ],
+        "gems": [
+          [
+            4,
+            0
+          ]
+        ],
+        "doors": []
+      },
+      "memory_snapshots": null
+    },
+    "05-compass-enum": {
+      "id": "05-compass-enum",
+      "chapter": 2,
+      "order": 5,
+      "title": "神奇羅盤",
+      "kind": "build",
+      "visual": "grid",
+      "story": "我在退潮的沙洲撿到一個古老羅盤，上面只有四個方向。\n傳說只要把羅盤方向翻譯成指令，就能找到通往潮汐神殿的路。\n路線羅盤已經指好了，翻譯的部分就拜託你了。\n",
+      "concept": "## enum：列出所有可能\n\n- `enum Dir { Up, Down, Left, Right }`：方向只會是這四種之一\n- 用 `Dir::Up` 取得其中一個值\n\n## match：每種情況都要處理\n\n- `match d { Dir::Up => ..., Dir::Down => ..., ... }`\n- match 是運算式，可以直接當回傳值\n- 少寫任何一個分支，編譯器都會拒絕（下一章會正面遇到）\n\n## derive\n\n- `#[derive(Debug, Clone, Copy, PartialEq)]` 讓編譯器自動幫 enum 產生「可印出、可複製、可比較」的能力\n",
+      "hints": [
+        "todo!() 會在執行時 panic，要把它換成真正的 match",
+        "command 的每個分支回傳字串，例如 Dir::Up => \"MOVE UP\"，最後記得轉成 String",
+        "delta 回傳 (x 位移, y 位移)：往上是 (0, -1)，往右是 (1, 0)"
+      ],
+      "starter": "#[derive(Debug, Clone, Copy, PartialEq)]\nenum Dir {\n    Up,\n    Down,\n    Left,\n    Right,\n}\n\n// 把方向翻譯成 Ferris 的指令\nfn command(d: Dir) -> String {\n    todo!(\"用 match 回傳 MOVE UP / MOVE DOWN / MOVE LEFT / MOVE RIGHT\")\n}\n\n// 方向對應的 (x, y) 位移\nfn delta(d: Dir) -> (i32, i32) {\n    todo!(\"用 match 回傳位移\")\n}\n\nfn route() -> Vec<String> {\n    let plan = [Dir::Right, Dir::Right, Dir::Down, Dir::Down, Dir::Right];\n    plan.iter().map(|d| command(*d)).collect()\n}\n\nfn main() {\n    for c in route() {\n        println!(\"{}\", c);\n    }\n}\n",
+      "grid": {
+        "width": 4,
+        "height": 3,
+        "start": [
+          0,
+          0
+        ],
+        "goal": [
+          3,
+          2
+        ],
+        "walls": [
+          [
+            3,
+            0
+          ],
+          [
+            0,
+            1
+          ],
+          [
+            0,
+            2
+          ]
+        ],
+        "gems": [],
+        "doors": []
+      },
+      "memory_snapshots": null
+    },
+    "09-move-the-gem": {
+      "id": "09-move-the-gem",
+      "chapter": 3,
+      "order": 9,
+      "title": "交出去的背包",
+      "kind": "fix-compile",
+      "visual": "memory",
+      "story": "我把背包交給海鷗清點數量。\n牠數完說「三樣」，就連背包一起飛走了。\n我回頭想看第一樣寶物是什麼，手上卻空空如也……\n",
+      "concept": "## Ownership 三條規則\n\n- 每個值都有一個**擁有者（owner）**\n- 同一時間只能有**一個**擁有者\n- 擁有者離開作用域時，值會被**釋放（drop）**\n\n## Move（移動）\n\n- `count_items(bag)` 把 `Vec<String>` 傳進函式，擁有權就**移動**給參數\n- 函式結束時參數被 drop，heap 上的資料跟著釋放\n- 之後再用 `bag` 就是 **E0382** use / borrow of moved value\n\n## 三種修法與取捨\n\n- **調整順序**：先讀 `bag[0]`，再交出去（本關解答）\n- **`bag.clone()`**：複製一份 heap 資料，代價是多一次配置與複製\n- **改傳 `&bag`**：只借不給，下一關的主題\n",
+      "hints": [
+        "錯誤訊息說 bag 在哪一行被 move 了？之後又在哪一行被使用？",
+        "count_items(bag) 之後，bag 已經不屬於 report 了",
+        "把 let first = bag[0].clone(); 移到 count_items(bag) 之前"
+      ],
+      "starter": "// 計算背包裡有幾樣東西\nfn count_items(bag: Vec<String>) -> usize {\n    bag.len()\n}\n\n// 回傳 (數量, 第一樣東西)\nfn report() -> (usize, String) {\n    let bag = vec![String::from(\"珍珠\"), String::from(\"貝殼\"), String::from(\"海星\")];\n    let n = count_items(bag);\n    let first = bag[0].clone();\n    (n, first)\n}\n\nfn main() {\n    let (n, first) = report();\n    println!(\"背包有 {} 樣，第一樣是 {}\", n, first);\n}\n",
+      "grid": null,
+      "memory_snapshots": [
+        {
+          "line": 8,
+          "note": "bag 擁有 heap 上的三個字串",
+          "frames": [
+            {
+              "id": "report",
+              "fn": "report",
+              "vars": [
+                {
+                  "id": "report.bag",
+                  "name": "bag",
+                  "type": "Vec<String>",
+                  "value": "len=3 cap=3",
+                  "state": "live"
+                }
+              ]
+            }
+          ],
+          "heap": [
+            {
+              "id": "h1",
+              "type": "[String; 3]",
+              "value": "珍珠 | 貝殼 | 海星",
+              "state": "live"
+            }
+          ],
+          "pointers": [
+            {
+              "from": "report.bag",
+              "to": "h1",
+              "kind": "own"
+            }
+          ],
+          "error": null
+        },
+        {
+          "line": 3,
+          "note": "擁有權移動到 count_items 的參數，report 的 bag 失效",
+          "frames": [
+            {
+              "id": "report",
+              "fn": "report",
+              "vars": [
+                {
+                  "id": "report.bag",
+                  "name": "bag",
+                  "type": "Vec<String>",
+                  "value": null,
+                  "state": "moved"
+                }
+              ]
+            },
+            {
+              "id": "count_items",
+              "fn": "count_items",
+              "vars": [
+                {
+                  "id": "count_items.bag",
+                  "name": "bag",
+                  "type": "Vec<String>",
+                  "value": "len=3 cap=3",
+                  "state": "live"
+                }
+              ]
+            }
+          ],
+          "heap": [
+            {
+              "id": "h1",
+              "type": "[String; 3]",
+              "value": "珍珠 | 貝殼 | 海星",
+              "state": "live"
+            }
+          ],
+          "pointers": [
+            {
+              "from": "count_items.bag",
+              "to": "h1",
+              "kind": "own"
+            }
+          ],
+          "error": null
+        },
+        {
+          "line": 9,
+          "note": "count_items 結束，參數被 drop，heap 資料釋放",
+          "frames": [
+            {
+              "id": "report",
+              "fn": "report",
+              "vars": [
+                {
+                  "id": "report.bag",
+                  "name": "bag",
+                  "type": "Vec<String>",
+                  "value": null,
+                  "state": "moved"
+                },
+                {
+                  "id": "report.n",
+                  "name": "n",
+                  "type": "usize",
+                  "value": "3",
+                  "state": "live"
+                }
+              ]
+            }
+          ],
+          "heap": [
+            {
+              "id": "h1",
+              "type": "[String; 3]",
+              "value": "珍珠 | 貝殼 | 海星",
+              "state": "freed"
+            }
+          ],
+          "pointers": [],
+          "error": null
+        },
+        {
+          "line": 10,
+          "note": "再讀 `bag[0]`，編譯器回報 **E0382** borrow of moved value: `bag`",
+          "frames": [
+            {
+              "id": "report",
+              "fn": "report",
+              "vars": [
+                {
+                  "id": "report.bag",
+                  "name": "bag",
+                  "type": "Vec<String>",
+                  "value": null,
+                  "state": "moved"
+                },
+                {
+                  "id": "report.n",
+                  "name": "n",
+                  "type": "usize",
+                  "value": "3",
+                  "state": "live"
+                }
+              ]
+            }
+          ],
+          "heap": [],
+          "pointers": [],
+          "error": {
+            "code": "E0382",
+            "target": "report.bag"
+          }
+        }
+      ]
+    },
+    "11-one-writer-rule": {
+      "id": "11-one-writer-rule",
+      "chapter": 3,
+      "order": 11,
+      "title": "一寫多讀",
+      "kind": "fix-compile",
+      "visual": "memory",
+      "story": "我想先記住背包裡第一樣寶物的名字，再把剛撿到的紅寶石放進去。\n很合理的兩個動作，編譯器卻說不行。\n海鷗歪著頭：「你手指還指著第一格，背包就要搬家了耶。」\n",
+      "concept": "## 借用規則\n\n- 同一時間，二選一：\n  - 任意多個**共享借用** `&T`（只能讀）\n  - 恰好一個**可變借用** `&mut T`（可讀可寫）\n- 借用的有效範圍：從建立到**最後一次使用**為止（NLL，Non-Lexical Lifetimes：依實際使用位置判斷借用何時結束）\n\n## 為什麼 push 不能和 &bag[0] 共存\n\n- `push` 可能讓 `Vec` 容量不足而**重新配置**：搬到 heap 的新位置，舊位置釋放\n- `first` 還指著舊位置，就會變成懸空參考（dangling reference）\n- 其他語言要到執行期才出事，Rust 在編譯期用 **E0502** 擋下\n\n## 修法\n\n- 不要「拿著參考」跨過修改：先 `clone()` 成自己擁有的 `String`\n- 或把讀取移到修改之後\n",
+      "hints": [
+        "錯誤訊息標了三個位置：哪裡借出、哪裡要可變借用、哪裡還在用第一個借用",
+        "first 是 &String，它在 push 之後才被使用，所以借用一直延續到 push 之後",
+        "把 let first = &bag[0]; 改成 let first = bag[0].clone();，最後直接回傳 first"
+      ],
+      "starter": "// 先記下第一樣寶物，再放入紅寶石\nfn first_then_add(bag: &mut Vec<String>) -> String {\n    let first = &bag[0];\n    bag.push(String::from(\"紅寶石\"));\n    first.clone()\n}\n\nfn main() {\n    let mut bag = vec![String::from(\"珍珠\")];\n    let first = first_then_add(&mut bag);\n    println!(\"{} {:?}\", first, bag);\n}\n",
+      "grid": null,
+      "memory_snapshots": [
+        {
+          "line": 3,
+          "note": "first 共享借用 bag 的第一格",
+          "frames": [
+            {
+              "id": "main",
+              "fn": "main",
+              "vars": [
+                {
+                  "id": "main.bag",
+                  "name": "bag",
+                  "type": "Vec<String>",
+                  "value": "len=1 cap=1",
+                  "state": "live"
+                }
+              ]
+            },
+            {
+              "id": "first_then_add",
+              "fn": "first_then_add",
+              "vars": [
+                {
+                  "id": "first_then_add.bag",
+                  "name": "bag",
+                  "type": "&mut Vec<String>",
+                  "value": null,
+                  "state": "live"
+                },
+                {
+                  "id": "first_then_add.first",
+                  "name": "first",
+                  "type": "&String",
+                  "value": null,
+                  "state": "live"
+                }
+              ]
+            }
+          ],
+          "heap": [
+            {
+              "id": "h1",
+              "type": "[String; 1]",
+              "value": "珍珠",
+              "state": "live"
+            }
+          ],
+          "pointers": [
+            {
+              "from": "main.bag",
+              "to": "h1",
+              "kind": "own"
+            },
+            {
+              "from": "first_then_add.bag",
+              "to": "main.bag",
+              "kind": "mut"
+            },
+            {
+              "from": "first_then_add.first",
+              "to": "h1",
+              "kind": "shared"
+            }
+          ],
+          "error": null
+        },
+        {
+          "line": 4,
+          "note": "push 需要擴充容量，buffer 搬家，first 會指向已釋放的位置；編譯器回報 **E0502** cannot borrow `*bag` as mutable because it is also borrowed as immutable",
+          "frames": [
+            {
+              "id": "main",
+              "fn": "main",
+              "vars": [
+                {
+                  "id": "main.bag",
+                  "name": "bag",
+                  "type": "Vec<String>",
+                  "value": "len=2 cap=4",
+                  "state": "live"
+                }
+              ]
+            },
+            {
+              "id": "first_then_add",
+              "fn": "first_then_add",
+              "vars": [
+                {
+                  "id": "first_then_add.bag",
+                  "name": "bag",
+                  "type": "&mut Vec<String>",
+                  "value": null,
+                  "state": "live"
+                },
+                {
+                  "id": "first_then_add.first",
+                  "name": "first",
+                  "type": "&String",
+                  "value": null,
+                  "state": "live"
+                }
+              ]
+            }
+          ],
+          "heap": [
+            {
+              "id": "h1",
+              "type": "[String; 1]",
+              "value": "珍珠",
+              "state": "freed"
+            },
+            {
+              "id": "h2",
+              "type": "[String; 4]",
+              "value": "珍珠 | 紅寶石",
+              "state": "live"
+            }
+          ],
+          "pointers": [
+            {
+              "from": "main.bag",
+              "to": "h2",
+              "kind": "own"
+            },
+            {
+              "from": "first_then_add.bag",
+              "to": "main.bag",
+              "kind": "mut"
+            },
+            {
+              "from": "first_then_add.first",
+              "to": "h1",
+              "kind": "shared"
+            }
+          ],
+          "error": {
+            "code": "E0502",
+            "target": "first_then_add.first"
+          }
+        },
+        {
+          "line": 4,
+          "note": "（修正後）first 是 clone 出來的字串，擁有自己的 heap 資料，push 搬家不影響它",
+          "frames": [
+            {
+              "id": "main",
+              "fn": "main",
+              "vars": [
+                {
+                  "id": "main.bag",
+                  "name": "bag",
+                  "type": "Vec<String>",
+                  "value": "len=2 cap=4",
+                  "state": "live"
+                }
+              ]
+            },
+            {
+              "id": "first_then_add",
+              "fn": "first_then_add",
+              "vars": [
+                {
+                  "id": "first_then_add.bag",
+                  "name": "bag",
+                  "type": "&mut Vec<String>",
+                  "value": null,
+                  "state": "live"
+                },
+                {
+                  "id": "first_then_add.first",
+                  "name": "first",
+                  "type": "String",
+                  "value": null,
+                  "state": "live"
+                }
+              ]
+            }
+          ],
+          "heap": [
+            {
+              "id": "h2",
+              "type": "[String; 4]",
+              "value": "珍珠 | 紅寶石",
+              "state": "live"
+            },
+            {
+              "id": "h3",
+              "type": "str",
+              "value": "珍珠",
+              "state": "live"
+            }
+          ],
+          "pointers": [
+            {
+              "from": "main.bag",
+              "to": "h2",
+              "kind": "own"
+            },
+            {
+              "from": "first_then_add.bag",
+              "to": "main.bag",
+              "kind": "mut"
+            },
+            {
+              "from": "first_then_add.first",
+              "to": "h3",
+              "kind": "own"
+            }
+          ],
+          "error": null
+        }
+      ]
+    },
+    "19-question-mark": {
+      "id": "19-question-mark",
+      "chapter": 5,
+      "order": 19,
+      "title": "沒有寶石的島",
+      "kind": "debug",
+      "visual": "grid",
+      "story": "我寫了一個自動導航程式：找到寶石、規劃路線、出發。\n前幾座島都很順利，直到登上一座光禿禿的小島，程式直接崩潰，我原地暈倒。\n導航程式應該冷靜地回報「這裡沒有寶石」，而不是倒下。幫我修好它！\n",
+      "concept": "## Option：可能沒有值\n\n- `Option<T>` 只有兩種：`Some(值)` 或 `None`\n- Rust 沒有 null，「可能沒有」一定寫在型別上\n\n## unwrap 的風險\n\n- `unwrap()` 遇到 `None` 會 **panic**，程式直接中止\n- 適合「確定不可能是 None」的地方，不適合處理正常會發生的情況\n\n## ? 運算子\n\n- 在回傳 `Option` 的函式裡，`x?` 的意思是：\n  - `x` 是 `Some(v)` 就取出 `v` 繼續\n  - `x` 是 `None` 就**立刻回傳 None**\n- 同樣適用於 `Result`，下一關會用到\n\n## Debug 心法\n\n- 先看測試失敗的 panic 訊息，再對照程式找出是哪個 `unwrap` 爆掉\n",
+      "hints": [
+        "失敗的測試是哪兩個？它們的地圖有什麼共同點？",
+        "panic 訊息是 called `Option::unwrap()` on a `None` value，去找 plan 裡的 unwrap",
+        "plan 本身就回傳 Option，把三個 .unwrap() 改成 ? 就好"
+      ],
+      "starter": "// 找出字元在地圖上的位置 (x, y)\nfn find(map: &[&str], target: char) -> Option<(usize, usize)> {\n    for (y, line) in map.iter().enumerate() {\n        if let Some(x) = line.chars().position(|ch| ch == target) {\n            return Some((x, y));\n        }\n    }\n    None\n}\n\n// 從 from 走到 to：先上下、再左右\nfn walk(cmds: &mut Vec<String>, from: (usize, usize), to: (usize, usize)) {\n    let vertical = if to.1 > from.1 { \"MOVE DOWN\" } else { \"MOVE UP\" };\n    for _ in 0..from.1.abs_diff(to.1) {\n        cmds.push(vertical.to_string());\n    }\n    let horizontal = if to.0 > from.0 { \"MOVE RIGHT\" } else { \"MOVE LEFT\" };\n    for _ in 0..from.0.abs_diff(to.0) {\n        cmds.push(horizontal.to_string());\n    }\n}\n\n// 規劃先撿寶石再到出口的路線，地圖缺 F、G、E 任一個時回傳 None\nfn plan(map: &[&str]) -> Option<Vec<String>> {\n    let ferris = find(map, 'F').unwrap();\n    let gem = find(map, 'G').unwrap();\n    let exit = find(map, 'E').unwrap();\n    let mut cmds = Vec::new();\n    walk(&mut cmds, ferris, gem);\n    cmds.push(\"PICK\".to_string());\n    walk(&mut cmds, gem, exit);\n    Some(cmds)\n}\n\nfn main() {\n    let map = [\"F....\", \".....\", \"...GE\"];\n    match plan(&map) {\n        Some(cmds) => {\n            for c in cmds {\n                println!(\"{}\", c);\n            }\n        }\n        None => println!(\"這座島沒有寶石\"),\n    }\n}\n",
+      "grid": {
+        "width": 5,
+        "height": 3,
+        "start": [
+          0,
+          0
+        ],
+        "goal": [
+          4,
+          2
+        ],
+        "walls": [],
+        "gems": [
+          [
+            3,
+            2
+          ]
+        ],
+        "doors": []
+      },
+      "memory_snapshots": null
+    },
+    "28-refcell-panic": {
+      "id": "28-refcell-panic",
+      "chapter": 7,
+      "order": 28,
+      "title": "寶物箱卡住了",
+      "kind": "debug",
+      "visual": "memory",
+      "story": "我和海鷗合買了一個寶物箱，用 Rc 讓我們都能拿著鑰匙。\n因為兩個都要往裡面放東西，箱子外面又套了一層 RefCell。\n規則很簡單：重複的寶物不放，新的才放。\n可是我第一次放海星，箱子就「喀」一聲卡死了。\n",
+      "concept": "## Rc<RefCell<T>>：共享又可修改\n\n- `Rc<T>`：多個擁有者共享同一份資料，`Rc::clone` 只加**參考計數**\n- `RefCell<T>`：**interior mutability（內部可變性）**，透過共享參考也能修改內容\n- 合起來就是「多人共用、大家都能改」\n\n## 代價：借用規則延後到執行期\n\n- `borrow()` 拿到 `Ref`（共享借用），`borrow_mut()` 拿到 `RefMut`（可變借用）\n- 規則和編譯期一樣：多個 `Ref` 或一個 `RefMut`\n- 違反時不是編譯錯誤，而是**執行時 panic**（BorrowMutError）\n- `Ref` 要等變數離開作用域（或 `drop`）才歸還\n\n## Debug 心法\n\n- 找出 panic 當下「還活著的 Ref」是哪個變數\n- 縮短借用：用完立刻結束，不要把 `Ref` 存在變數裡跨過 `borrow_mut()`\n\n## 2024 edition：if let 暫存值提早釋放\n\n- `if let Some(x) = c.borrow().items.first() { .. } else { c.borrow_mut() .. }`\n- 2021：scrutinee 的 `Ref` 活到整個 `else` 結束，`else` 裡 `borrow_mut()` 會 panic\n- 2024：`Ref` 在進入 `else` 前就釋放，不再 panic\n- 但 `then` 區塊內仍持有 `Ref`，在那裡 `borrow_mut()` 依然 panic\n",
+      "hints": [
+        "panic 訊息提到 already borrowed，代表 borrow_mut 時還有人在借",
+        "view 是 chest.borrow() 回傳的 Ref，它活到函式最後一行",
+        "先算出 exists 這個 bool，讓 borrow() 在同一行結束；需要時再 borrow_mut 放入，最後重新 borrow() 取長度"
+      ],
+      "starter": "use std::cell::RefCell;\nuse std::rc::Rc;\n\n// Ferris 與海鷗共用的寶物箱\nstruct Chest {\n    items: Vec<String>,\n}\n\n// 放入寶物（重複就不放），回傳箱內數量\nfn deposit(chest: &Rc<RefCell<Chest>>, item: &str) -> usize {\n    let view = chest.borrow();\n    if view.items.iter().any(|i| i.as_str() == item) {\n        return view.items.len();\n    }\n    chest.borrow_mut().items.push(item.to_string());\n    view.items.len()\n}\n\nfn main() {\n    let chest = Rc::new(RefCell::new(Chest { items: vec![String::from(\"珍珠\")] }));\n    let gull = Rc::clone(&chest);\n    println!(\"箱內 {} 樣\", deposit(&chest, \"海星\"));\n    println!(\"箱內 {} 樣\", deposit(&gull, \"海星\"));\n}\n",
+      "grid": null,
+      "memory_snapshots": [
+        {
+          "line": 21,
+          "note": "chest 與 gull 共享同一個寶物箱，strong = 2",
+          "frames": [
+            {
+              "id": "main",
+              "fn": "main",
+              "vars": [
+                {
+                  "id": "main.chest",
+                  "name": "chest",
+                  "type": "Rc<RefCell<Chest>>",
+                  "value": null,
+                  "state": "live"
+                },
+                {
+                  "id": "main.gull",
+                  "name": "gull",
+                  "type": "Rc<RefCell<Chest>>",
+                  "value": null,
+                  "state": "live"
+                }
+              ]
+            }
+          ],
+          "heap": [
+            {
+              "id": "h1",
+              "type": "RcBox<RefCell<Chest>>",
+              "value": "items: [珍珠] · strong=2 weak=0 · 借用：無",
+              "state": "live"
+            }
+          ],
+          "pointers": [
+            {
+              "from": "main.chest",
+              "to": "h1",
+              "kind": "own"
+            },
+            {
+              "from": "main.gull",
+              "to": "h1",
+              "kind": "own"
+            }
+          ],
+          "error": null
+        },
+        {
+          "line": 11,
+          "note": "view 取得共享借用，RefCell 記下 1 個共享借用",
+          "frames": [
+            {
+              "id": "main",
+              "fn": "main",
+              "vars": [
+                {
+                  "id": "main.chest",
+                  "name": "chest",
+                  "type": "Rc<RefCell<Chest>>",
+                  "value": null,
+                  "state": "live"
+                },
+                {
+                  "id": "main.gull",
+                  "name": "gull",
+                  "type": "Rc<RefCell<Chest>>",
+                  "value": null,
+                  "state": "live"
+                }
+              ]
+            },
+            {
+              "id": "deposit",
+              "fn": "deposit",
+              "vars": [
+                {
+                  "id": "deposit.chest",
+                  "name": "chest",
+                  "type": "&Rc<RefCell<Chest>>",
+                  "value": null,
+                  "state": "live"
+                },
+                {
+                  "id": "deposit.view",
+                  "name": "view",
+                  "type": "Ref<Chest>",
+                  "value": null,
+                  "state": "live"
+                }
+              ]
+            }
+          ],
+          "heap": [
+            {
+              "id": "h1",
+              "type": "RcBox<RefCell<Chest>>",
+              "value": "items: [珍珠] · strong=2 weak=0 · 借用：1 個共享",
+              "state": "live"
+            }
+          ],
+          "pointers": [
+            {
+              "from": "main.chest",
+              "to": "h1",
+              "kind": "own"
+            },
+            {
+              "from": "main.gull",
+              "to": "h1",
+              "kind": "own"
+            },
+            {
+              "from": "deposit.chest",
+              "to": "main.chest",
+              "kind": "shared"
+            },
+            {
+              "from": "deposit.view",
+              "to": "h1",
+              "kind": "shared"
+            }
+          ],
+          "error": null
+        },
+        {
+          "line": 15,
+          "note": "view 還沒歸還就要 `borrow_mut()`，執行期 panic：RefCell already borrowed",
+          "frames": [
+            {
+              "id": "main",
+              "fn": "main",
+              "vars": [
+                {
+                  "id": "main.chest",
+                  "name": "chest",
+                  "type": "Rc<RefCell<Chest>>",
+                  "value": null,
+                  "state": "live"
+                },
+                {
+                  "id": "main.gull",
+                  "name": "gull",
+                  "type": "Rc<RefCell<Chest>>",
+                  "value": null,
+                  "state": "live"
+                }
+              ]
+            },
+            {
+              "id": "deposit",
+              "fn": "deposit",
+              "vars": [
+                {
+                  "id": "deposit.chest",
+                  "name": "chest",
+                  "type": "&Rc<RefCell<Chest>>",
+                  "value": null,
+                  "state": "live"
+                },
+                {
+                  "id": "deposit.view",
+                  "name": "view",
+                  "type": "Ref<Chest>",
+                  "value": null,
+                  "state": "live"
+                }
+              ]
+            }
+          ],
+          "heap": [
+            {
+              "id": "h1",
+              "type": "RcBox<RefCell<Chest>>",
+              "value": "items: [珍珠] · strong=2 weak=0 · 借用：1 個共享",
+              "state": "live"
+            }
+          ],
+          "pointers": [
+            {
+              "from": "main.chest",
+              "to": "h1",
+              "kind": "own"
+            },
+            {
+              "from": "main.gull",
+              "to": "h1",
+              "kind": "own"
+            },
+            {
+              "from": "deposit.chest",
+              "to": "main.chest",
+              "kind": "shared"
+            },
+            {
+              "from": "deposit.view",
+              "to": "h1",
+              "kind": "shared"
+            }
+          ],
+          "error": {
+            "code": null,
+            "target": "deposit.view"
+          }
+        },
+        {
+          "line": 13,
+          "note": "（修正後）共享借用在算出 exists 那行就歸還，再取得可變借用放入海星",
+          "frames": [
+            {
+              "id": "main",
+              "fn": "main",
+              "vars": [
+                {
+                  "id": "main.chest",
+                  "name": "chest",
+                  "type": "Rc<RefCell<Chest>>",
+                  "value": null,
+                  "state": "live"
+                },
+                {
+                  "id": "main.gull",
+                  "name": "gull",
+                  "type": "Rc<RefCell<Chest>>",
+                  "value": null,
+                  "state": "live"
+                }
+              ]
+            },
+            {
+              "id": "deposit",
+              "fn": "deposit",
+              "vars": [
+                {
+                  "id": "deposit.chest",
+                  "name": "chest",
+                  "type": "&Rc<RefCell<Chest>>",
+                  "value": null,
+                  "state": "live"
+                },
+                {
+                  "id": "deposit.exists",
+                  "name": "exists",
+                  "type": "bool",
+                  "value": "false",
+                  "state": "live"
+                }
+              ]
+            }
+          ],
+          "heap": [
+            {
+              "id": "h1",
+              "type": "RcBox<RefCell<Chest>>",
+              "value": "items: [珍珠, 海星] · strong=2 weak=0 · 借用：可變",
+              "state": "live"
+            }
+          ],
+          "pointers": [
+            {
+              "from": "main.chest",
+              "to": "h1",
+              "kind": "own"
+            },
+            {
+              "from": "main.gull",
+              "to": "h1",
+              "kind": "own"
+            },
+            {
+              "from": "deposit.chest",
+              "to": "main.chest",
+              "kind": "shared"
+            }
+          ],
+          "error": null
+        }
+      ]
+    },
+    "31-shared-counter": {
+      "id": "31-shared-counter",
+      "chapter": 8,
+      "order": 31,
+      "title": "消失的寶石",
+      "kind": "debug",
+      "visual": "none",
+      "story": "大遷徙前夕，我派出一百隻分身，每隻負責一片海灘。\n大家撿完寶石，就把數量加進共用的計數器。\n所有分身都平安回來了，計數器上卻寫著：0。\n寶石到底去哪了？\n",
+      "concept": "## Arc<Mutex<T>>：跨執行緒共享又可修改\n\n- `Arc<T>`：**原子參考計數**，`Rc` 的執行緒安全版（實作 `Send` + `Sync`）\n- `Mutex<T>`：同一時間只允許一個執行緒存取內容\n- `lock()` 回傳 `MutexGuard<T>`，guard 存活期間持有鎖，離開作用域自動解鎖\n\n## 這關的陷阱：複製出來改\n\n- `*guard` 對 `u32` 這種 `Copy` 型別，會**複製**一份值出來\n- 對複本 `+=` 不會影響 Mutex 裡的值\n- 要透過 guard 本身修改：`*guard += n`\n\n## 對照第 28 關\n\n- `Rc<RefCell<T>>`：單執行緒，借用檢查在執行期\n- `Arc<Mutex<T>>`：多執行緒，存取權用鎖控制\n\n## 2024 edition：尾端暫存值提早釋放\n\n- 函式最後一行 `*total.lock().unwrap()` 產生的 MutexGuard 是暫存值\n- 2024 起，尾端運算式的暫存值會在區域變數之前釋放，guard 不會比 `total` 活得久\n- 2021 同一行會觸發 E0597，必須先存進變數再回傳\n\n## Debug 心法\n\n- 編譯器的警告也是線索：value assigned is never read\n",
+      "hints": [
+        "先看編譯警告，有一個變數「被賦值卻從來沒被讀過」",
+        "let mut sum = *total.lock().unwrap(); 的 sum 是 u32 複本，不是計數器本身",
+        "把 guard 留在變數裡：let mut sum = total.lock().unwrap(); 再寫 *sum += gems;"
+      ],
+      "starter": "use std::sync::{Arc, Mutex};\nuse std::thread;\n\n// 每隻螃蟹撿完一片海灘，把數量加進總數\nfn gather(beaches: Vec<u32>) -> u32 {\n    let total = Arc::new(Mutex::new(0u32));\n    let mut handles = Vec::new();\n    for gems in beaches {\n        let total = Arc::clone(&total);\n        handles.push(thread::spawn(move || {\n            let mut sum = *total.lock().unwrap();\n            sum += gems;\n        }));\n    }\n    for h in handles {\n        h.join().unwrap();\n    }\n    // 2024 edition：尾端暫存的 guard 會先於 total 釋放\n    *total.lock().unwrap()\n}\n\nfn main() {\n    println!(\"總共 {} 顆寶石\", gather(vec![3, 5, 7]));\n}\n",
+      "grid": null,
+      "memory_snapshots": null
+    }
+  }
+}
