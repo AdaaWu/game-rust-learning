@@ -1,0 +1,146 @@
+id = "16-relic-struct"
+chapter = 4
+order = 16
+title = "導遊卷軸"
+kind = "build"
+visual = "memory"
+
+story = """
+遺跡的古碑太重搬不動，我決定做一卷導遊卷軸帶海鷗參觀。
+卷軸不抄原文，只記下「古碑在哪」，看的時候直接指著古碑念。
+導覽結束卷軸就收起來，但海鷗要把找到的句子記在腦袋裡帶走。
+"""
+
+concept = """
+## struct 也可以持有參考
+
+- `struct Guide<'a> { text: &'a str }`：卷軸借用原文，不擁有
+- `'a` 的意思：**Guide 不能比它借用的原文活得久**
+- 好處：建立卷軸零複製；代價：原文必須一直活著，卷軸也不能被帶到原文消失之後
+
+## impl 區塊要宣告同一個 `'a`
+
+- `impl<'a> Guide<'a>`，方法裡的 `&'a str` 就是「原文的生命週期」
+
+## 省略規則遇上 `&self`
+
+- `fn line_count(&self) -> usize`：沒有回傳參考，不需要標註
+- 若寫成 `fn find(&self, keyword: &str) -> Vec<&str>`，省略規則會讓回傳值借自 **`&self`（卷軸）**
+- 那樣卷軸一收起來，找到的句子就跟著失效
+- 寫成 `Vec<&'a str>`：句子借自**原文**，卷軸丟了也沒關係
+
+## 函式簽名
+
+- `fn tour<'a>(text: &'a str, keyword: &str) -> (usize, Vec<&'a str>)`
+- 有兩個參考輸入，省略規則不適用，所以要標出「回傳的句子借自 text」
+"""
+
+hints = [
+  "卷軸只存一個參考：new 拿到的 text 要放進 Guide 的哪個欄位？str 有沒有現成的方法，能一行一行走過原文？",
+  "find 的迴圈裡，line 是原文的 &'a str 切片，用 line.contains(keyword) 判斷後 push 進 found",
+  "不要把 find 的回傳型別改成 Vec<&str>：tour 裡的 guide 是區域變數，回傳的句子必須借自原文而不是卷軸",
+]
+
+[[memory_snapshots]]
+line = 35
+note = "main 的 text 擁有古碑原文，三行共 50 個 byte"
+heap = [
+  { id = "h1", type = "str", value = "螃蟹王的寶冠⏎海鷗的羽毛⏎古老的寶石", state = "live" },
+]
+pointers = [
+  { from = "main.text", to = "h1", kind = "own" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.text", name = "text", type = "String", value = "len=50", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 29
+note = "`Guide::new(text)`：卷軸只存一個指標加長度，指向 main 的原文"
+heap = [
+  { id = "h1", type = "str", value = "螃蟹王的寶冠⏎海鷗的羽毛⏎古老的寶石", state = "live" },
+]
+pointers = [
+  { from = "main.text", to = "h1", kind = "own" },
+  { from = "tour.text", to = "h1", kind = "shared" },
+  { from = "tour.guide", to = "h1", kind = "shared" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.text", name = "text", type = "String", value = "len=50", state = "live" },
+]
+
+[[memory_snapshots.frames]]
+id = "tour"
+fn = "tour"
+vars = [
+  { id = "tour.text", name = "text", type = "&'a str", state = "live" },
+  { id = "tour.keyword", name = "keyword", type = "&str", value = "\"寶\"", state = "live" },
+  { id = "tour.guide", name = "guide", type = "Guide<'a>", value = "text: ptr+len=50", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 21
+note = "find 逐行走訪：每個 line 都是原文的切片，符合的就把切片放進 found，不複製任何字"
+heap = [
+  { id = "h1", type = "str", value = "螃蟹王的寶冠⏎海鷗的羽毛⏎古老的寶石", state = "live" },
+  { id = "h2", type = "[&str; 2]", value = "→螃蟹王的寶冠 | →古老的寶石", state = "live" },
+]
+pointers = [
+  { from = "main.text", to = "h1", kind = "own" },
+  { from = "tour.guide", to = "h1", kind = "shared" },
+  { from = "find.self", to = "tour.guide", kind = "shared" },
+  { from = "find.line", to = "h1", kind = "shared" },
+  { from = "find.found", to = "h2", kind = "own" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.text", name = "text", type = "String", value = "len=50", state = "live" },
+]
+
+[[memory_snapshots.frames]]
+id = "tour"
+fn = "tour"
+vars = [
+  { id = "tour.guide", name = "guide", type = "Guide<'a>", value = "text: ptr+len=50", state = "live" },
+]
+
+[[memory_snapshots.frames]]
+id = "find"
+fn = "Guide::find"
+vars = [
+  { id = "find.self", name = "self", type = "&Guide<'a>", state = "live" },
+  { id = "find.line", name = "line", type = "&'a str", value = "\"古老的寶石\"", state = "live" },
+  { id = "find.found", name = "found", type = "Vec<&'a str>", value = "len=2", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 36
+note = "tour 結束，卷軸 guide 已經 drop；found 裡的句子借自原文 `'a`，只要 text 還在就能讀"
+heap = [
+  { id = "h1", type = "str", value = "螃蟹王的寶冠⏎海鷗的羽毛⏎古老的寶石", state = "live" },
+  { id = "h2", type = "[&str; 2]", value = "→螃蟹王的寶冠 | →古老的寶石", state = "live" },
+]
+pointers = [
+  { from = "main.text", to = "h1", kind = "own" },
+  { from = "main.found", to = "h2", kind = "own" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.text", name = "text", type = "String", value = "len=50", state = "live" },
+  { id = "main.lines", name = "lines", type = "usize", value = "3", state = "live" },
+  { id = "main.found", name = "found", type = "Vec<&str>", value = "len=2", state = "live" },
+]

@@ -1,0 +1,110 @@
+id = "09-move-the-gem"
+chapter = 3
+order = 9
+title = "交出去的背包"
+kind = "fix-compile"
+visual = "memory"
+
+story = """
+我把背包交給海鷗清點數量。
+牠數完說「三樣」，就連背包一起飛走了。
+我回頭想看第一樣寶物是什麼，手上卻空空如也……
+"""
+
+concept = """
+## Ownership 三條規則
+
+- 每個值都有一個**擁有者（owner）**
+- 同一時間只能有**一個**擁有者
+- 擁有者離開作用域時，值會被**釋放（drop）**
+
+## Move（移動）
+
+- `count_items(bag)` 把 `Vec<String>` 傳進函式，擁有權就**移動**給參數
+- 函式結束時參數被 drop，heap 上的資料跟著釋放
+- 之後再用 `bag` 就是 **E0382** use / borrow of moved value
+
+## 三種修法與取捨
+
+- **調整順序**：先讀 `bag[0]`，再交出去（本關解答）
+- **`bag.clone()`**：複製一份 heap 資料，代價是多一次配置與複製
+- **改傳 `&bag`**：只借不給，下一關的主題
+"""
+
+hints = [
+  "錯誤訊息說 bag 在哪一行被 move 了？之後又在哪一行被使用？",
+  "count_items(bag) 之後，bag 已經不屬於 report 了",
+  "把 let first = bag[0].clone(); 移到 count_items(bag) 之前",
+]
+
+[[memory_snapshots]]
+line = 8
+note = "bag 擁有 heap 上的三個字串"
+heap = [
+  { id = "h1", type = "[String; 3]", value = "珍珠 | 貝殼 | 海星", state = "live" },
+]
+pointers = [
+  { from = "report.bag", to = "h1", kind = "own" },
+]
+
+[[memory_snapshots.frames]]
+id = "report"
+fn = "report"
+vars = [
+  { id = "report.bag", name = "bag", type = "Vec<String>", value = "len=3 cap=3", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 3
+note = "擁有權移動到 count_items 的參數，report 的 bag 失效"
+heap = [
+  { id = "h1", type = "[String; 3]", value = "珍珠 | 貝殼 | 海星", state = "live" },
+]
+pointers = [
+  { from = "count_items.bag", to = "h1", kind = "own" },
+]
+
+[[memory_snapshots.frames]]
+id = "report"
+fn = "report"
+vars = [
+  { id = "report.bag", name = "bag", type = "Vec<String>", state = "moved" },
+]
+
+[[memory_snapshots.frames]]
+id = "count_items"
+fn = "count_items"
+vars = [
+  { id = "count_items.bag", name = "bag", type = "Vec<String>", value = "len=3 cap=3", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 9
+note = "count_items 結束，參數被 drop，heap 資料釋放"
+heap = [
+  { id = "h1", type = "[String; 3]", value = "珍珠 | 貝殼 | 海星", state = "freed" },
+]
+pointers = []
+
+[[memory_snapshots.frames]]
+id = "report"
+fn = "report"
+vars = [
+  { id = "report.bag", name = "bag", type = "Vec<String>", state = "moved" },
+  { id = "report.n", name = "n", type = "usize", value = "3", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 10
+note = "再讀 `bag[0]`，編譯器回報 **E0382** borrow of moved value: `bag`"
+error = { code = "E0382", target = "report.bag" }
+heap = []
+pointers = []
+
+[[memory_snapshots.frames]]
+id = "report"
+fn = "report"
+vars = [
+  { id = "report.bag", name = "bag", type = "Vec<String>", state = "moved" },
+  { id = "report.n", name = "n", type = "usize", value = "3", state = "live" },
+]

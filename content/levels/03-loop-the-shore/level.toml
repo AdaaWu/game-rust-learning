@@ -1,0 +1,55 @@
+id = "03-loop-the-shore"
+chapter = 1
+order = 3
+title = "海岸巡邏"
+kind = "build"
+visual = "grid"
+
+story = """
+穿過岩縫，眼前是一片三層的階梯海岸，每一層盡頭都卡著一顆寶石。
+要來回巡邏三趟，一趟就是六個 MOVE，手寫下去指令會長到看不完。
+海鷗說：「同樣的事做很多次？那就交給迴圈啊。」
+"""
+
+concept = """
+## 三種迴圈
+
+- `for i in 0..n { ... }`：跑固定次數，`0..n` 是 range，包含 0、不含 n
+- `while 條件 { ... }`：條件成立就繼續跑，適合「不知道要跑幾次」
+- `loop { ... }`：無限迴圈，靠 `break` 離開
+
+## loop 可以帶回一個值
+
+- `break 值;` 會結束 `loop`，並把值當成整個 `loop` 運算式的結果
+- 放在函式最後一行（不加分號），就直接成為回傳值
+
+```rust
+let mut n = 0;
+let found = loop {
+    n += 1;
+    if n * n > 20 {
+        break n;
+    }
+};
+```
+
+## 取捨
+
+- 能用 `for` 就用 `for`：次數由 range 決定，不會忘記遞增而跑成無窮迴圈
+- `while`、`loop` 比較自由，但要自己保證條件一定會結束
+- `cmds.extend(另一個 Vec)`：把另一個清單的內容全部接到尾端
+"""
+
+hints = [
+  "walk 是「固定重複 n 次」，patrol_rows 是「不知道要跑幾次、走出海岸才停」：這兩種情況各適合哪一種迴圈？",
+  "patrol_rows：從第 0 列開始，每巡一列就往下跳兩列；跳出 height 就 break 回傳巡過幾列",
+  "walk 的 push 內容可以寫 format!(\"MOVE {}\", dir)；patrol_rows 用 row、count 兩個 mut 變數，在 loop 開頭判斷 row >= height 時 break count",
+]
+
+[grid]
+width  = 7
+height = 5
+start  = [0, 0]
+goal   = [6, 4]
+walls  = [[0, 1], [1, 1], [2, 1], [3, 1], [4, 1], [5, 1], [1, 3], [2, 3], [3, 3], [4, 3], [5, 3], [6, 3]]
+gems   = [[6, 0], [0, 2]]

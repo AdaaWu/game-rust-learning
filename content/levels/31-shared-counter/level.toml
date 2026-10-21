@@ -1,0 +1,55 @@
+id = "31-shared-counter"
+chapter = 8
+order = 31
+title = "消失的寶石"
+kind = "debug"
+visual = "none"
+
+story = """
+大遷徙前夕，我派出一百隻分身，每隻負責一片海灘。
+大家撿完寶石，就呼叫 `add_haul` 把數量加進共用的計數器。
+所有分身都平安回來了，計數器上卻寫著：0。
+海鷗盯著空空的寶物箱：「寶石該不會被你們吃掉了吧？」
+"""
+
+concept = """
+## Arc<Mutex<T>>：跨執行緒共享又可修改
+
+- `Arc<T>`：**原子參考計數**，`Rc` 的執行緒安全版（實作 `Send` + `Sync`）
+- `Mutex<T>`：同一時間只允許一個執行緒存取內容
+- `lock()` 回傳 `MutexGuard<T>`，guard 存活期間持有鎖，離開作用域自動解鎖
+
+## 這關的陷阱：複製出來改
+
+- `*guard` 對 `u32` 這種 `Copy` 型別，會**複製**一份值出來
+- 對複本 `+=` 不會影響 Mutex 裡的值
+- 要透過 guard 本身修改：`*guard += n`
+
+## 為什麼 &Mutex 能交給一百條執行緒
+
+- `Mutex<T>` 只要 `T: Send` 就是 `Sync`：多條執行緒同時拿著 `&Mutex<u32>` 是安全的
+- 真正碰到內容前一定要先 `lock()`，同一時間只有一條執行緒拿得到 guard
+- 所以 `add_haul` 只需要 `&Mutex<u32>`，不用知道外面是 `Arc` 還是 `thread::scope` 借來的
+
+## 對照第 28 關
+
+- `Rc<RefCell<T>>`：單執行緒，借用檢查在執行期
+- `Arc<Mutex<T>>`：多執行緒，存取權用鎖控制
+
+## 2024 edition：尾端暫存值提早釋放
+
+- 函式最後一行 `*total.lock().unwrap()` 產生的 MutexGuard 是暫存值
+- 2024 起，尾端運算式的暫存值會在區域變數之前釋放，guard 不會比 `total` 活得久
+- 2021 同一行會觸發 E0597，必須先存進變數再回傳
+
+## Debug 心法
+
+- 編譯器的警告也是線索：value assigned is never read
+"""
+
+hints = [
+  "編譯器有一則警告說某個變數被賦值後從來沒被讀過，是 add_haul 裡的哪一個？它和計數器是同一個東西嗎？",
+  "let mut sum = *total.lock().unwrap(); 的 sum 是 u32 複本，不是計數器本身",
+  "把 guard 留在變數裡：let mut sum = total.lock().unwrap(); 再寫 *sum += gems;",
+  "讀出舊值和寫回新值要在同一次 lock() 內完成（原子性）：分兩次上鎖，中間別的螃蟹可能插隊，寶石照樣會消失",
+]

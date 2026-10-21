@@ -1,0 +1,42 @@
+id = "20-bottle-message"
+chapter = 5
+order = 20
+title = "漂流瓶密語"
+kind = "build"
+visual = "none"
+
+story = """
+導航修好後，我在礁石間撈到一整串漂流瓶，每個瓶子裡都塞著一行航海密語。
+大部分寫著 `RIGHT 3` 這種「方向 步數」，可是有的被海水泡爛、有的方向是亂寫的。
+我不想再看到「解析失敗」四個字就放棄，請幫我做一台會說清楚**錯在哪**的解讀機。
+"""
+
+concept = """
+## Result：成功或失敗都寫進型別
+
+- `Result<T, E>` 只有兩種值：`Ok(值)` 或 `Err(錯誤)`
+- `"3".parse::<u32>()` 回傳 `Result<u32, ParseIntError>`，數字寫錯就是 `Err`
+
+## 自訂 error enum
+
+- 用 enum 列出所有失敗原因：`Empty`、`UnknownDir(String)`、`BadSteps(ParseIntError)`
+- 每種錯誤可以帶資料，呼叫端能用 `match` 精準處理，而不是只拿到一句字串
+- 取捨：字串錯誤寫起來快，但呼叫端無法分辨；enum 多寫幾行，換來可以 match 的錯誤
+
+## ? 與 From
+
+- 在回傳 `Result<_, BottleError>` 的函式裡，`x?` 遇到 `Err(e)` 會**立刻回傳**
+- 回傳前會呼叫 `From::from(e)` 轉成函式宣告的錯誤型別
+- 所以只要寫好 `impl From<ParseIntError> for BottleError`，`text.parse::<u32>()?` 就能直接用
+
+## Option 轉 Result
+
+- `words.next()` 回傳 `Option<&str>`
+- `.ok_or(BottleError::Empty)` 把 `None` 換成指定的錯誤，之後就能接 `?`
+"""
+
+hints = [
+  "parse_line 回傳 Result<_, BottleError>，但步數 parse 失敗給的是 ParseIntError：? 要靠哪個 impl 把它轉過去？BottleError 的哪個成員剛好裝得下它？",
+  "parse_line 用 split_whitespace 拆出兩個字，第一個字用 ok_or 處理空白信，再交給 parse_dir",
+  "步數的字可能不存在，用 unwrap_or(\"\") 補成空字串，再 parse::<u32>()?，From 會幫你轉成 BadSteps",
+]

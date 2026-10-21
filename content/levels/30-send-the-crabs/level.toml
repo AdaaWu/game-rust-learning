@@ -1,0 +1,60 @@
+id = "30-send-the-crabs"
+chapter = 8
+order = 30
+title = "派出分身"
+kind = "fix-compile"
+visual = "none"
+
+story = """
+走出洞窟，海面上全是準備遷徙的螃蟹，大遷徙要開始了！
+路太長，我決定變出分身，每隻分身各開一條執行緒，同時出發探路。
+可是點名的時候，編譯器說分身會比編號活得久；發地圖的時候，又說 Rc 不能帶出門。
+海鷗在旁邊笑：「分身連門都出不去，還遷徙咧。」
+"""
+
+concept = """
+## thread::spawn 與 'static
+
+- `thread::spawn(closure)` 開一條新執行緒，回傳 `JoinHandle<T>`
+- 新執行緒可能比呼叫它的函式**活得更久**，所以 closure 不能借用函式裡的區域變數，只能**擁有**自己要用的東西（`'static`）
+- `handle.join()` 等那條執行緒做完，拿回它的回傳值；這關由呼叫端（`main` 或測試）負責 join
+
+## move closure（E0373）
+
+- 沒寫 `move` 時，closure 預設用**借用**捕捉變數，例如 `&i`
+- 迴圈結束 `i` 就消失，執行緒卻可能還在跑，所以編譯器回報 **E0373** closure may outlive the current function
+- `move || ...`：把捕捉到的變數**移進** closure；`usize` 是 `Copy`，移進去的是一份複本
+
+## Send 與 Sync：兩個自動標記的 trait
+
+- `Send`：這個型別的值可以安全地**移到**另一條執行緒（交出所有權）
+- `Sync`：這個型別可以讓多條執行緒**同時持有 `&T`**；定義上 `T: Sync` 等於 `&T: Send`
+- 編譯器依欄位自動推導，不用手寫；只要有一個欄位不是，整個型別就不是
+- 常見對照
+  - `i32`、`String`、`Vec<T>`（T 是 Send）：Send + Sync
+  - `Rc<T>`：兩者都不是，計數是普通整數
+  - `RefCell<T>`：Send 但不是 Sync，借用計數不是原子操作
+  - `Arc<T>`：T 是 Send + Sync 時，它也是 Send + Sync
+  - `Mutex<T>`：T 是 Send 就同時是 Send + Sync，鎖替它擋住同時存取（下一關會用到）
+
+## Rc 不是 Send（E0277）
+
+- `Rc` 的計數是普通整數，兩條執行緒同時 `clone`／`drop` 會算錯
+- 把 `Rc` 帶進 `thread::spawn`，編譯器回報 **E0277** `Rc<Map>` cannot be sent between threads safely
+
+## Arc：執行緒安全版的 Rc
+
+- `Arc<T>`：**Atomically Reference Counted**，用原子操作更新計數，可以跨執行緒共享
+- 用法和 `Rc` 一樣：`Arc::new`、`Arc::clone` 只加計數
+- 取捨：原子操作比普通加減慢一點，只在真的要跨執行緒時才用
+
+## 另一條路
+
+- `thread::scope` 保證執行緒在作用域結束前收回，scope 裡的執行緒就能直接借用區域變數
+"""
+
+hints = [
+  "編譯器點了兩個錯：一個在 roll_call、一個在 dispatch。分身出門時，是帶著編號 i 本身，還是只借了它？",
+  "roll_call 的 closure 借用了迴圈變數 i，讓 closure 擁有它：在 || 前面加上 move",
+  "pack 回傳的 Rc 不是 Send：把 use、pack 的回傳型別、Rc::new、Rc::clone 都換成 Arc",
+]

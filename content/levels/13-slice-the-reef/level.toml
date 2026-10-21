@@ -1,0 +1,167 @@
+id = "13-slice-the-reef"
+chapter = 3
+order = 13
+title = "切開珊瑚礁"
+kind = "build"
+visual = "memory"
+
+story = """
+我畫了一張珊瑚礁地圖，寄居蟹只需要看中間那一段。
+整張抄一份給牠太浪費，我只想指著原圖說「看這裡」。
+還有水深表和隊員名單要處理：有的東西隨手就能複製，有的得認真抄一份。
+"""
+
+concept = """
+## slice：借用一段連續資料
+
+- `&str` 是**字串切片**：一個指標加一個長度，指向別人擁有的 UTF-8 bytes
+- `&map[2..6]` 不複製任何字元，只是「從第 2 個 byte 起看 4 個 byte」
+- `&[u32]`、`&[String]` 同理：`&v[1..]` 借用 Vec 的後半段
+- 參數寫 `&str` / `&[T]` 比寫 `&String` / `&Vec<T>` 更通用：String、字串常值、Vec、陣列都能傳進來
+
+## `String` 與 `&str`
+
+- `String`：擁有 heap 上的資料，可以增長
+- `&str`：只借不擁有，不能增長；字串常值 `"~~##"` 也是 `&str`
+
+## `Copy` 與 `Clone`
+
+- `u32`、`bool`、`char` 這類**`Copy`** 型別「按位元複製一份就完整」，也沒有需要釋放的資源，所以 `let max = depths[0];` 直接複製一份，原本的還在
+- `Copy` 與資料放在 stack 或 heap 無關：`depths` 的 `u32` 其實放在 Vec 的 heap 上，照樣能 Copy
+- 區域變數 `String` 的指標、長度、容量放在 stack，卻不能 Copy：它擁有 heap 資料，drop 時要釋放，按位元複製會變成兩個擁有者
+- `String` 不是 `Copy`：`crew[0]` 不能被「搬出」借來的 slice，要用 `.clone()` 明確複製 heap 資料
+- 取捨：`Copy` 便宜而且是隱式的；`Clone` 可能很貴，所以 Rust 要你寫出來
+
+## 注意
+
+- slice 的索引是 **byte**，不是「第幾個字」；本關地圖只有 ASCII，一個字剛好一個 byte
+- 中文一個字佔 3 個 byte，切錯位置會怎樣？第 4 章最後會遇到
+"""
+
+hints = [
+  "segment 回傳的是 &str：它該借用 map 的一段，還是另做一份新字串？從第 start 個 byte 起取 len 個，終點是哪個 byte？",
+  "deepest 的 d 是 &u32，用 *d 取值比較和更新 max；u32 是 Copy，取出來不影響原本的 slice",
+  "first_mate 回傳 crew[0].clone()：String 不是 Copy，不能直接從借來的 slice 裡搬走",
+]
+
+[[memory_snapshots]]
+line = 23
+note = "map、depths、crew 各自擁有 heap 上的資料"
+heap = [
+  { id = "h1", type = "str", value = "~~##~~**~~", state = "live" },
+  { id = "h2", type = "[u32; 4]", value = "12 | 3 | 9 | 4", state = "live" },
+  { id = "h3", type = "[String; 2]", value = "海鷗 | 寄居蟹", state = "live" },
+]
+pointers = [
+  { from = "main.map", to = "h1", kind = "own" },
+  { from = "main.depths", to = "h2", kind = "own" },
+  { from = "main.crew", to = "h3", kind = "own" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.map", name = "map", type = "String", value = "len=10 cap=10", state = "live" },
+  { id = "main.depths", name = "depths", type = "Vec<u32>", value = "len=4 cap=4", state = "live" },
+  { id = "main.crew", name = "crew", type = "Vec<String>", value = "len=2 cap=2", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 3
+note = "`segment(&map, 2, 4)`：回傳的 `&str` 指向原本地圖的第 2–5 個 byte「##~~」，沒有新的 heap 配置"
+heap = [
+  { id = "h1", type = "str", value = "~~##~~**~~", state = "live" },
+  { id = "h2", type = "[u32; 4]", value = "12 | 3 | 9 | 4", state = "live" },
+  { id = "h3", type = "[String; 2]", value = "海鷗 | 寄居蟹", state = "live" },
+]
+pointers = [
+  { from = "main.map", to = "h1", kind = "own" },
+  { from = "main.depths", to = "h2", kind = "own" },
+  { from = "main.crew", to = "h3", kind = "own" },
+  { from = "segment.map", to = "h1", kind = "shared" },
+  { from = "segment.part", to = "h1", kind = "shared" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.map", name = "map", type = "String", value = "len=10 cap=10", state = "live" },
+  { id = "main.depths", name = "depths", type = "Vec<u32>", value = "len=4 cap=4", state = "live" },
+  { id = "main.crew", name = "crew", type = "Vec<String>", value = "len=2 cap=2", state = "live" },
+]
+
+[[memory_snapshots.frames]]
+id = "segment"
+fn = "segment"
+vars = [
+  { id = "segment.map", name = "map", type = "&str", value = "ptr+len=10", state = "live" },
+  { id = "segment.part", name = "（回傳值）", type = "&str", value = "\"##~~\" ptr+len=4", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 12
+note = "`deepest(&depths[1..])` 只借後段 3 格；max 是區域變數，值是從 slice 按位元複製出來的 `u32`"
+heap = [
+  { id = "h1", type = "str", value = "~~##~~**~~", state = "live" },
+  { id = "h2", type = "[u32; 4]", value = "12 | 3 | 9 | 4", state = "live" },
+  { id = "h3", type = "[String; 2]", value = "海鷗 | 寄居蟹", state = "live" },
+]
+pointers = [
+  { from = "main.map", to = "h1", kind = "own" },
+  { from = "main.depths", to = "h2", kind = "own" },
+  { from = "main.crew", to = "h3", kind = "own" },
+  { from = "deepest.depths", to = "h2", kind = "shared" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.map", name = "map", type = "String", value = "len=10 cap=10", state = "live" },
+  { id = "main.depths", name = "depths", type = "Vec<u32>", value = "len=4 cap=4", state = "live" },
+  { id = "main.crew", name = "crew", type = "Vec<String>", value = "len=2 cap=2", state = "live" },
+]
+
+[[memory_snapshots.frames]]
+id = "deepest"
+fn = "deepest"
+vars = [
+  { id = "deepest.depths", name = "depths", type = "&[u32]", value = "3 | 9 | 4", state = "live" },
+  { id = "deepest.max", name = "max", type = "u32", value = "9", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 17
+note = "`crew[0].clone()` 在 heap 上配置一份新的「海鷗」；原本的名單完整留在 crew"
+heap = [
+  { id = "h1", type = "str", value = "~~##~~**~~", state = "live" },
+  { id = "h2", type = "[u32; 4]", value = "12 | 3 | 9 | 4", state = "live" },
+  { id = "h3", type = "[String; 2]", value = "海鷗 | 寄居蟹", state = "live" },
+  { id = "h4", type = "str", value = "海鷗", state = "live" },
+]
+pointers = [
+  { from = "main.map", to = "h1", kind = "own" },
+  { from = "main.depths", to = "h2", kind = "own" },
+  { from = "main.crew", to = "h3", kind = "own" },
+  { from = "first_mate.crew", to = "h3", kind = "shared" },
+  { from = "first_mate.name", to = "h4", kind = "own" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.map", name = "map", type = "String", value = "len=10 cap=10", state = "live" },
+  { id = "main.depths", name = "depths", type = "Vec<u32>", value = "len=4 cap=4", state = "live" },
+  { id = "main.crew", name = "crew", type = "Vec<String>", value = "len=2 cap=2", state = "live" },
+]
+
+[[memory_snapshots.frames]]
+id = "first_mate"
+fn = "first_mate"
+vars = [
+  { id = "first_mate.crew", name = "crew", type = "&[String]", value = "len=2", state = "live" },
+  { id = "first_mate.name", name = "（回傳值）", type = "String", value = "len=6 cap=6", state = "live" },
+]

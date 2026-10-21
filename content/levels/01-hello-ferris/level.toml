@@ -1,0 +1,39 @@
+id = "01-hello-ferris"
+chapter = 1
+order = 1
+title = "第一步"
+kind = "build"
+visual = "grid"
+
+story = """
+我在沙灘上醒來，殼上還沾著海草。
+遠方的岩縫透出一道光，那應該是通往內陸的出口。
+可是我不知道怎麼走，我只聽得懂你寫的指令，帶我過去好嗎？
+"""
+
+concept = """
+## 函式與回傳值
+
+- `fn route() -> Vec<String>`：`->` 後面是回傳型別
+- 函式最後一行**不加分號**的運算式，就是回傳值
+- `Vec<String>`：可以變長的字串清單
+- `cmds.push(String::from("MOVE RIGHT"))`：往清單尾端加一個指令
+
+## main 與輸出
+
+- `main` 是程式進入點
+- `println!("{}", c)` 把指令印到 stdout，畫面上的 Ferris 會照著動
+"""
+
+hints = [
+  "出口在第 2 列最右邊，中間有一排岩石擋住",
+  "先往下走到最底列，再一路往右，最後往上一格",
+  "完整路線：MOVE DOWN 兩次、MOVE RIGHT 四次、MOVE UP 一次",
+]
+
+[grid]
+width  = 5
+height = 3
+start  = [0, 0]
+goal   = [4, 1]
+walls  = [[2, 0], [2, 1]]

@@ -1,0 +1,48 @@
+id = "19-question-mark"
+chapter = 5
+order = 19
+title = "沒有寶石的島"
+kind = "debug"
+visual = "grid"
+
+story = """
+我寫了一個自動導航程式：找到寶石、規劃路線、出發。
+前幾座島都很順利，直到登上一座光禿禿的小島，程式直接崩潰，我原地暈倒。
+導航程式應該冷靜地回報「這裡沒有寶石」，而不是倒下。幫我修好它！
+"""
+
+concept = """
+## Option：可能沒有值
+
+- `Option<T>` 只有兩種：`Some(值)` 或 `None`
+- Rust 沒有 null，「可能沒有」一定寫在型別上
+
+## unwrap 的風險
+
+- `unwrap()` 遇到 `None` 會 **panic**，程式直接中止
+- 適合「確定不可能是 None」的地方，不適合處理正常會發生的情況
+
+## ? 運算子
+
+- 在回傳 `Option` 的函式裡，`x?` 的意思是：
+  - `x` 是 `Some(v)` 就取出 `v` 繼續
+  - `x` 是 `None` 就**立刻回傳 None**
+- 同樣適用於 `Result`，下一關會用到
+
+## Debug 心法
+
+- 先看測試失敗的 panic 訊息，再對照程式找出是哪個 `unwrap` 爆掉
+"""
+
+hints = [
+  "失敗的測試是哪兩個？它們的地圖有什麼共同點？",
+  "panic 訊息是 called `Option::unwrap()` on a `None` value，去找 plan 裡的 unwrap",
+  "plan 本身就回傳 Option，把三個 .unwrap() 改成 ? 就好",
+]
+
+[grid]
+width  = 5
+height = 3
+start  = [0, 0]
+goal   = [4, 2]
+gems   = [[3, 2]]

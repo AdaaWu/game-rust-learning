@@ -1,0 +1,44 @@
+id = "25-lazy-current"
+chapter = 6
+order = 25
+title = "不動的計數器"
+kind = "debug"
+visual = "none"
+
+story = """
+學會 iterator 之後，我得意地把寶石統計也改成一條流水線。
+我跑遍三片海灘、撿了滿滿一袋，回來一看：計數器 0，日誌一行都沒有。
+程式沒有 panic、也沒有編譯錯誤，只有一則黃色的警告靜靜躺在那裡。
+"""
+
+concept = """
+## Iterator 是惰性的
+
+- `iter().map(...)` 不會馬上執行，只是建立一個「排好工作」的 `Map` 值
+- 要有人**消費**它（`collect`、`sum`、`count`、`for_each`、`for` 迴圈），closure 才會一個一個被呼叫
+- 沒被消費的 `Map` 在那一行結束就被丟掉，closure 一次都沒跑
+
+## #[must_use] 警告
+
+- `Map` 這類轉接器標了 `#[must_use]`
+- 建立了卻沒使用，編譯器會警告：`unused Map that must be used`，並提示 `iterators are lazy and do nothing unless consumed`
+- 這是編譯器在幫你抓邏輯錯，不要忽略黃色警告
+
+## FnMut：會修改環境的 closure
+
+- `|(i, gems)| { total += gems; log.push(...) }` 修改了外面的 `total` 與 `log`，以可變借用捕捉，屬於 `FnMut`
+- `map` 與 `for_each` 都接受 `FnMut`，所以兩者都能編譯
+- 差別只在於：`for_each` 會把 iterator 跑完，`map` 只會再產生一個 iterator
+
+## 選擇與取捨
+
+- **有副作用**（改外部變數、寫日誌）：用 `for` 迴圈或 `for_each`，意圖最清楚
+- **只算一個結果**：用 `sum`、`collect` 這類消費者，不必捕捉可變變數
+- `map` 用在「轉換成新值」，不要拿來做副作用
+"""
+
+hints = [
+  "海鷗：你沒看到那則黃色警告嗎？它說有個東西 must be used",
+  "map 只是排好工作，沒有消費者去拉，closure 一次都不會執行",
+  "把 haul 裡的 map 換成一個會「把 iterator 跑完」、又能接受同一個 closure 的方法，或改寫成 for 迴圈",
+]

@@ -1,0 +1,104 @@
+id = "26-box-the-cave"
+chapter = 7
+order = 26
+title = "無限深的洞窟"
+kind = "fix-compile"
+visual = "memory"
+
+story = """
+大遷徙的路線要穿過一座海底洞窟，海鷗說牠在洞口等我。
+我想先畫一張洞窟地圖：每一層有幾顆寶石，裡面還有更深的一層。
+可是地圖還沒畫完，編譯器就問我：「這張地圖到底要多大的紙？」
+洞窟裡還有洞窟，我自己也算不出來……
+"""
+
+concept = """
+## 編譯器要先知道每個型別多大
+
+- 區域變數放在 **stack**，編譯期就要決定佔幾個 bytes
+- enum 的大小取決於「最大的那個 variant」
+- `Tunnel(u32, Cave)`：Cave 裡有 Cave，裡面又有 Cave……大小算不完
+- 這就是 **E0072** recursive type has infinite size
+
+## Box：把下一層放到 heap
+
+- `Box<T>`：一個**擁有** heap 資料的指標，自己固定是一個指標大小
+- `Tunnel(u32, Box<Cave>)`：這層只放「寶石數＋一個指標」，下一層洞窟住在 heap
+- 建立時用 `Box::new(值)` 把值搬到 heap
+- `&Box<Cave>` 會自動 deref 成 `&Cave`，讀取的函式不用改
+
+## 取捨
+
+- 優點：遞迴結構（鏈結串列、樹）終於寫得出來；Box 離開作用域時整條鏈一層層自動釋放
+- 代價：每一層多一次 heap 配置，資料不再連續存放
+- 只有一個擁有者；要多人共用，下一關的 `Rc` 才派得上用場
+"""
+
+hints = [
+  "錯誤訊息的 help 建議了什麼？它叫你在哪裡插入 indirection（間接層）",
+  "把 Tunnel 的第二個欄位改成 Box<Cave>，讓下一層洞窟住到 heap 上",
+  "型別改完後 dig 會冒出型別不符：Box<Cave> 要用 Box::new(...) 把 dig(rest) 包起來",
+]
+
+[[memory_snapshots]]
+line = 32
+note = "main 要在 stack 上替 `cave` 留位置，先得知道 `Cave` 佔幾個 bytes"
+heap = []
+pointers = []
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.cave", name = "cave", type = "Cave", value = "大小 = ?", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 4
+note = "`Tunnel` 的大小 = u32 + Cave，而 Cave 又可能是 Tunnel……永遠算不完，編譯器回報 **E0072** recursive type has infinite size"
+error = { code = "E0072", target = "main.cave" }
+heap = []
+pointers = []
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.cave", name = "cave", type = "Cave", value = "4 + 4 + 4 + … = ∞", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 32
+note = "（修正後）stack 上只放第一層：寶石數＋一個 Box 指標；更深的洞窟一層層住在 heap"
+heap = [
+  { id = "h1", type = "Cave", value = "Tunnel(1, Box → h2)", state = "live" },
+  { id = "h2", type = "Cave", value = "Tunnel(4, Box → h3)", state = "live" },
+  { id = "h3", type = "Cave", value = "DeadEnd", state = "live" },
+]
+pointers = [
+  { from = "main.cave", to = "h1", kind = "own" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.cave", name = "cave", type = "Cave", value = "Tunnel(3, Box → h1) · 16 bytes", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 34
+note = "（修正後）main 結束，`cave` 被 drop；每個 Box 釋放自己擁有的下一層，整條洞窟一層層收乾淨"
+heap = [
+  { id = "h1", type = "Cave", value = "Tunnel(1, Box → h2)", state = "freed" },
+  { id = "h2", type = "Cave", value = "Tunnel(4, Box → h3)", state = "freed" },
+  { id = "h3", type = "Cave", value = "DeadEnd", state = "freed" },
+]
+pointers = []
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.cave", name = "cave", type = "Cave", state = "dropped" },
+]

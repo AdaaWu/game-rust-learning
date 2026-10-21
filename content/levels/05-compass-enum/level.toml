@@ -1,0 +1,42 @@
+id = "05-compass-enum"
+chapter = 2
+order = 5
+title = "神奇羅盤"
+kind = "build"
+visual = "grid"
+
+story = """
+我在退潮的沙洲撿到一個古老羅盤，上面只有四個方向。
+傳說只要把羅盤方向翻譯成指令，就能找到通往潮汐神殿的路。
+路線羅盤已經指好了，翻譯的部分就拜託你了。
+"""
+
+concept = """
+## enum：列出所有可能
+
+- `enum Dir { Up, Down, Left, Right }`：方向只會是這四種之一
+- 用 `Dir::Up` 取得其中一個值
+
+## match：每種情況都要處理
+
+- `match d { Dir::Up => ..., Dir::Down => ..., ... }`
+- match 是運算式，可以直接當回傳值
+- 少寫任何一個分支，編譯器都會拒絕（下一章會正面遇到）
+
+## derive
+
+- `#[derive(Debug, Clone, Copy, PartialEq)]` 讓編譯器自動幫 enum 產生「可印出、可複製、可比較」的能力
+"""
+
+hints = [
+  "todo!() 會在執行時 panic，要把它換成真正的 match",
+  "command 的每個分支回傳字串，例如 Dir::Up => \"MOVE UP\"，最後記得轉成 String",
+  "delta 回傳 (x 位移, y 位移)：往上是 (0, -1)，往右是 (1, 0)",
+]
+
+[grid]
+width  = 4
+height = 3
+start  = [0, 0]
+goal   = [3, 2]
+walls  = [[3, 0], [0, 1], [0, 2]]

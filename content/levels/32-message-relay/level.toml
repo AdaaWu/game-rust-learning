@@ -1,0 +1,60 @@
+id = "32-message-relay"
+chapter = 8
+order = 32
+title = "螃蟹傳令兵"
+kind = "build"
+visual = "grid"
+
+story = """
+大遷徙的路線太長，我請三隻螃蟹偵察員各探一段，再把路段傳回指揮部。
+大家一起擠在指揮部門口大喊，我一句也聽不清楚。
+海鷗建議裝一條**傳聲管**：螃蟹在這頭投遞，指揮部在那頭一份一份收。
+聽說還有一隻螃蟹常常迷路，指揮部可不能為了牠等到天黑。
+"""
+
+concept = """
+## channel：執行緒之間傳訊息
+
+- `let (tx, rx) = mpsc::channel();` 建一條 channel：`tx` 是 `Sender`（投遞端）、`rx` 是 `Receiver`（接收端）
+- mpsc 是 **multi-producer, single-consumer**：可以很多人送，只有一個人收
+- `tx.send(value)`：把值**移動**進 channel，送出後送方就不能再用它
+- 跟 `Arc<Mutex<T>>` 的取捨：共享記憶體要搶鎖；channel 改成「傳資料、不共享」，所有權跟著訊息走
+
+## 多個投遞端：tx.clone()
+
+- 每隻螃蟹要帶自己的 Sender 出門：`let tx = tx.clone();` 再 `thread::spawn(move || ...)`
+- `Sender<T>` 是 `Send`，可以移到別的執行緒
+
+## channel 什麼時候關閉
+
+- **所有** Sender 都被 drop 後，channel 才算關閉
+- `rx.recv()`、`for msg in rx` 在 channel 關閉前會一直等
+- 指揮部手上那個原始的 `tx` 自己不送東西，要記得 `drop(tx)`，不然接收端永遠等不到「關閉」
+
+## recv_timeout：有耐心上限的等待
+
+- `rx.recv_timeout(dur)` 最多等 `dur`，回傳 `Result<T, RecvTimeoutError>`
+  - `Ok(msg)`：收到一份
+  - `Err(Timeout)`：等太久，沒人送（例如有螃蟹迷路，還抓著 Sender 不放）
+  - `Err(Disconnected)`：所有 Sender 都放下了，不會再有訊息
+- `while let Ok(msg) = rx.recv_timeout(dur)` 兩種 Err 都會結束迴圈
+- 取捨：時限太短，慢一點的螃蟹會被當成迷路；太長，迷路時要等很久
+
+## 訊息的到達順序不固定
+
+- 執行緒誰先做完不一定；需要順序時，把編號一起送，收齊後再 `sort_by_key`
+"""
+
+hints = [
+  "螃蟹和指揮部各需要 channel 的哪一端？每隻螃蟹出門前，要帶的是同一個 tx 還是自己的一份？",
+  "scout 只要一行 tx.send(...).unwrap()；collect 用 while let Ok(r) = rx.recv_timeout(PATIENCE) 收進 Vec，再 sort_by_key 與 flat_map",
+  "relay：mpsc::channel() → 迴圈裡 let tx = tx.clone(); thread::spawn(move || scout(crab, tx)) → drop(tx) → collect(rx)",
+]
+
+[grid]
+width  = 6
+height = 3
+start  = [0, 0]
+goal   = [5, 2]
+walls  = [[1, 1], [3, 0], [4, 2]]
+gems   = [[2, 0], [3, 2]]

@@ -1,0 +1,161 @@
+id = "29-leaky-cycle"
+chapter = 7
+order = 29
+title = "永不消失的漩渦"
+kind = "debug"
+visual = "memory"
+
+story = """
+洞窟出口外有兩座小島：海龜島和珊瑚島，我讓它們互相記住對方是鄰居。
+照理說我一離開這片海域，兩座島就該沉回海底，還給大海。
+可是我回頭一看，它們還浮在那裡，中間捲起一個永遠不停的漩渦。
+程式沒有 panic、沒有錯誤訊息，只是記憶體再也收不回來。
+"""
+
+concept = """
+## Rc 循環參考：計數永遠歸不了零
+
+- `Rc` 只在 strong count 歸零時釋放資料
+- A 用 `Rc` 指著 B、B 也用 `Rc` 指著 A：外面的變數都 drop 了，兩邊仍各剩 1
+- 結果是**記憶體洩漏（memory leak）**：沒有 panic、沒有編譯錯誤，Rust 的安全保證**不包含**防止洩漏
+- `Drop` 永遠不會被呼叫，所以「沉入海底」那行永遠不會印出來
+
+## Weak：不擁有的參考
+
+- `Rc::downgrade(&rc)` 得到 `Weak<T>`：只加 **weak count**，不加 strong count
+- strong count 歸零時資料照樣釋放，不管還有多少 `Weak`
+- 要用資料時呼叫 `weak.upgrade()`，得到 `Option<Rc<T>>`：資料還在是 `Some`，已釋放是 `None`
+- `Weak::new()`：一開始什麼都不指的 Weak，`upgrade()` 一律回傳 `None`
+
+## 誰該擁有誰
+
+- 原則：擁有關係要是一棵**樹**，反方向或橫向的連結用 `Weak`
+- 常見例子：樹節點的 parent 指標、觀察者清單、快取
+- 這關兩座島的擁有者是外面的變數，島和島之間只是「認識」，不該互相擁有
+
+## Debug 心法
+
+- 用 `Rc::strong_count` 印出計數，看看誰多拿了一把鑰匙
+- 在 `Drop` 裡印一行：該印卻沒印，就是有人還抓著不放
+"""
+
+hints = [
+  "Run 看看主控台：離開作用域後，「沉入海底」有沒有印出來？strong count 是多少？",
+  "link 之後兩座島各被對方的 Rc 拉著，外面的變數 drop 後 strong count 還剩 1，永遠到不了 0",
+  "鄰居欄位改成 RefCell<Weak<Island>>：建立時用 Weak::new()，連結時用 Rc::downgrade，讀取時用 upgrade()",
+]
+
+[[memory_snapshots]]
+line = 35
+note = "兩座島各自浮出海面，各只有一個擁有者"
+heap = [
+  { id = "h1", type = "RcBox<Island>", value = "海龜島 · neighbor: None · strong=1 weak=0", state = "live" },
+  { id = "h2", type = "RcBox<Island>", value = "珊瑚島 · neighbor: None · strong=1 weak=0", state = "live" },
+]
+pointers = [
+  { from = "main.turtle", to = "h1", kind = "own" },
+  { from = "main.coral", to = "h2", kind = "own" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.turtle", name = "turtle", type = "Rc<Island>", state = "live" },
+  { id = "main.coral", name = "coral", type = "Rc<Island>", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 24
+note = "兩座島用 `Rc::clone` 互相記住對方：各多了一個擁有者，strong 都變成 2"
+heap = [
+  { id = "h1", type = "RcBox<Island>", value = "海龜島 · neighbor: Rc → 珊瑚島 · strong=2 weak=0", state = "live" },
+  { id = "h2", type = "RcBox<Island>", value = "珊瑚島 · neighbor: Rc → 海龜島 · strong=2 weak=0", state = "live" },
+]
+pointers = [
+  { from = "main.turtle", to = "h1", kind = "own" },
+  { from = "main.coral", to = "h2", kind = "own" },
+  { from = "link.a", to = "main.turtle", kind = "shared" },
+  { from = "link.b", to = "main.coral", kind = "shared" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.turtle", name = "turtle", type = "Rc<Island>", state = "live" },
+  { id = "main.coral", name = "coral", type = "Rc<Island>", state = "live" },
+]
+
+[[memory_snapshots.frames]]
+id = "link"
+fn = "link"
+vars = [
+  { id = "link.a", name = "a", type = "&Rc<Island>", state = "live" },
+  { id = "link.b", name = "b", type = "&Rc<Island>", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 39
+note = "離開作用域，`turtle`、`coral` 都 drop 了，可是兩座島互相拉著，strong 停在 1：沒有 panic，記憶體卻永遠收不回來"
+error = { target = "h1" }
+heap = [
+  { id = "h1", type = "RcBox<Island>", value = "海龜島 · neighbor: Rc → 珊瑚島 · strong=1 weak=0", state = "live" },
+  { id = "h2", type = "RcBox<Island>", value = "珊瑚島 · neighbor: Rc → 海龜島 · strong=1 weak=0", state = "live" },
+]
+pointers = []
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.turtle", name = "turtle", type = "Rc<Island>", state = "dropped" },
+  { id = "main.coral", name = "coral", type = "Rc<Island>", state = "dropped" },
+]
+
+[[memory_snapshots]]
+line = 24
+note = "（修正後）改用 `Rc::downgrade`：鄰居只是認識，不擁有，strong 維持 1、weak 變成 1"
+heap = [
+  { id = "h1", type = "RcBox<Island>", value = "海龜島 · neighbor: Weak → 珊瑚島 · strong=1 weak=1", state = "live" },
+  { id = "h2", type = "RcBox<Island>", value = "珊瑚島 · neighbor: Weak → 海龜島 · strong=1 weak=1", state = "live" },
+]
+pointers = [
+  { from = "main.turtle", to = "h1", kind = "own" },
+  { from = "main.coral", to = "h2", kind = "own" },
+  { from = "link.a", to = "main.turtle", kind = "shared" },
+  { from = "link.b", to = "main.coral", kind = "shared" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.turtle", name = "turtle", type = "Rc<Island>", state = "live" },
+  { id = "main.coral", name = "coral", type = "Rc<Island>", state = "live" },
+]
+
+[[memory_snapshots.frames]]
+id = "link"
+fn = "link"
+vars = [
+  { id = "link.a", name = "a", type = "&Rc<Island>", state = "live" },
+  { id = "link.b", name = "b", type = "&Rc<Island>", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 39
+note = "（修正後）離開作用域，strong 歸零，`Drop` 印出「沉入海底」，兩座島都釋放；漩渦消失"
+heap = [
+  { id = "h1", type = "RcBox<Island>", value = "海龜島 · strong=0", state = "freed" },
+  { id = "h2", type = "RcBox<Island>", value = "珊瑚島 · strong=0", state = "freed" },
+]
+pointers = []
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.turtle", name = "turtle", type = "Rc<Island>", state = "dropped" },
+  { id = "main.coral", name = "coral", type = "Rc<Island>", state = "dropped" },
+]

@@ -1,0 +1,52 @@
+id = "24-iterator-tide"
+chapter = 6
+order = 24
+title = "一行退潮"
+kind = "build"
+visual = "grid"
+
+story = """
+工匠之島每天傍晚退潮，沙灘上會露出一串記號，標出通往寶石的路。
+問題是記號之間混滿了貝殼和海草，我一格一格看，看到眼睛都花了。
+老工匠說真正的工匠只用**一條流水線**：篩掉雜訊、翻成指令、收進袋子。
+"""
+
+concept = """
+## Iterator：一個接一個交出元素
+
+- `marks.chars()` 產生一個 iterator，每次交出一個 `char`
+- iterator 可以串接「轉接器」，每一步只描述要做什麼
+
+## 常用轉接器
+
+- `filter(|c| 條件)`：只留下條件為 true 的元素
+- `map(|c| 新值)`：把每個元素換成另一個值
+- `collect()`：把結果收進集合，例如 `Vec<String>`，型別由回傳值推斷
+- `count()`：數一數剩下幾個
+
+## closure：可以帶走環境的小函式
+
+- `|c| *c == target`：參數寫在 `| |` 之間，後面是函式本體
+- closure 可以直接使用外面的變數 `target`，這叫**捕捉**
+- 這裡只讀取 `target`，所以是以不可變借用捕捉（`Fn`）
+- 取捨：iterator 鏈讀起來是「要什麼」而不是「怎麼做」，效能與手寫迴圈相同（零成本抽象）；但鏈太長時，中間值不好除錯
+
+## filter 拿到的是參考
+
+- `chars()` 交出 `char`，但 `filter` 的 closure 收到的是 `&char`
+- 比較時要解參考：`*c == target`
+"""
+
+hints = [
+  "decode 的形狀是 marks.chars().filter(...).map(...).collect()",
+  "filter 可以用 \"RLUD*\".contains(*c) 判斷是不是記號；map 裡用 match 把字元換成指令字串",
+  "count_marks 只需要 chars、filter、count 三步；filter 的 closure 拿 *c 和 target 比較",
+]
+
+[grid]
+width  = 5
+height = 4
+start  = [0, 0]
+goal   = [3, 3]
+walls  = [[1, 1], [0, 2], [4, 1], [1, 3]]
+gems   = [[2, 0], [3, 2]]

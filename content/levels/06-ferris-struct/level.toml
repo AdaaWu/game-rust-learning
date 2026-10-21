@@ -1,0 +1,47 @@
+id = "06-ferris-struct"
+chapter = 2
+order = 6
+title = "Ferris 的狀態欄"
+kind = "build"
+visual = "grid"
+
+story = """
+羅盤帶我來到潮汐神殿門口，守門的老海龜遞給我一張狀態卡。
+上面寫著我的位置、體力和背包裡的寶石，以後每走一步都要記下來。
+體力只有 7 點，走完一步扣一點，用完就再也走不動了。
+"""
+
+concept = """
+## struct：把相關的資料綁在一起
+
+- `struct Ferris { pos: (i32, i32), hp: u32, gems: u32, log: Vec<String> }`
+- 建立：`Ferris { pos: (0, 0), hp, gems: 0, log: Vec::new() }`，欄位名和變數同名時可以簡寫成 `hp`
+- 讀取欄位用 `ferris.hp`；tuple 欄位用 `.0`、`.1`
+
+## impl：替 struct 加上方法
+
+- `fn new(...) -> Ferris`：沒有 `self` 的是**關聯函式**，用 `Ferris::new(7)` 呼叫
+- `&self`：只讀，例如查詢「累了沒」
+- `&mut self`：會修改自己，例如走一步要改位置、扣體力
+- 呼叫方法的變數本身要是 `let mut`，才能呼叫 `&mut self` 方法
+
+## 取捨：方法簽名就是承諾
+
+- 能用 `&self` 就不要用 `&mut self`：呼叫端一看就知道這個方法不會改資料
+- `&mut self` 方法裡可以呼叫 `&self` 方法（例如在 `step` 裡先問 `is_tired()`）
+- `u32` 減到 0 以下會 overflow panic，所以要先檢查體力再扣
+"""
+
+hints = [
+  "is_tired、step、pick 三個方法裡，哪些只是「看」Ferris、哪些會「改」Ferris？對照它們的 &self 與 &mut self，各自該碰哪些欄位？",
+  "step 開頭先問 self.is_tired()，累了就 return；沒累才用 delta(d) 更新 pos",
+  "step 的順序：判斷累了沒 → let (dx, dy) = delta(d) → 更新 self.pos → self.hp -= 1 → self.log.push(command(d))",
+]
+
+[grid]
+width  = 6
+height = 4
+start  = [0, 0]
+goal   = [5, 2]
+walls  = [[3, 0], [4, 0], [3, 1], [0, 2], [1, 2], [2, 3], [3, 3]]
+gems   = [[2, 1], [4, 2]]

@@ -1,0 +1,128 @@
+id = "10-borrow-dont-take"
+chapter = 3
+order = 10
+title = "借看不給拿"
+kind = "build"
+visual = "memory"
+
+story = """
+上次把背包整個交給海鷗，結果牠連背包一起飛走了。
+這次我學乖了：只把背包「借」牠看，數完還是我的。
+等一下我還要往背包裡放紅寶石，那一步只有我自己能動手。
+"""
+
+concept = """
+## 借用（borrowing）：用參考代替交出擁有權
+
+- `&T` **共享借用**：只能讀，擁有權留在原處
+- `&mut T` **可變借用**：可以改，但改的仍是原本那一份
+- 呼叫端也要寫出來：`gull_count(&bag)`、`put_in(&mut bag, ...)`，一眼就看得出誰會改資料
+- 要可變借用，變數本身必須宣告成 `let mut`
+
+## 走訪參考
+
+- `for item in bag`，`bag` 是 `&Vec<String>` 時，`item` 是 `&String`
+- 走訪參考不會吃掉 Vec，迴圈結束後背包還在
+
+## 取捨
+
+- 傳 `&T`：零複製、呼叫後還能用，適合「只看」
+- 傳 `&mut T`：原地修改、不必回傳新值，代價是借用期間別人不能碰
+- 傳 `T`（第 9 關）：交出擁有權，適合「交出去就不要了」
+"""
+
+hints = [
+  "海鷗只看不拿，Ferris 卻要往背包裡放東西：這兩件事各需要哪一種借用？呼叫時 bag 前面要加什麼？",
+  "gull_count 裡用 item.ends_with(\"寶石\") 判斷；put_in 用 bag.push(...)，item 是 &str 要先轉成 String",
+  "trip 的三個 TODO 依序是 gull_count(&bag)、put_in(&mut bag, \"紅寶石\")、gull_count(&bag)",
+]
+
+[[memory_snapshots]]
+line = 3
+note = "bag 擁有 heap 上的兩樣寶物"
+heap = [
+  { id = "h1", type = "[String; 2]", value = "藍寶石 | 貝殼", state = "live" },
+]
+pointers = [
+  { from = "trip.bag", to = "h1", kind = "own" },
+]
+
+[[memory_snapshots.frames]]
+id = "trip"
+fn = "trip"
+vars = [
+  { id = "trip.bag", name = "bag", type = "Vec<String>", value = "len=2 cap=2", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 4
+note = "`gull_count(&bag)`：海鷗拿到的是共享借用，只能看；擁有者還是 trip 的 bag"
+heap = [
+  { id = "h1", type = "[String; 2]", value = "藍寶石 | 貝殼", state = "live" },
+]
+pointers = [
+  { from = "trip.bag", to = "h1", kind = "own" },
+  { from = "gull_count.bag", to = "trip.bag", kind = "shared" },
+]
+
+[[memory_snapshots.frames]]
+id = "trip"
+fn = "trip"
+vars = [
+  { id = "trip.bag", name = "bag", type = "Vec<String>", value = "len=2 cap=2", state = "live" },
+]
+
+[[memory_snapshots.frames]]
+id = "gull_count"
+fn = "gull_count"
+vars = [
+  { id = "gull_count.bag", name = "bag", type = "&Vec<String>", state = "live" },
+  { id = "gull_count.count", name = "count", type = "usize", value = "1", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 5
+note = "`put_in(&mut bag, ...)`：可變借用期間只有 put_in 能動背包；push 時容量不夠，資料搬到新的 heap 位置"
+heap = [
+  { id = "h1", type = "[String; 2]", value = "藍寶石 | 貝殼", state = "freed" },
+  { id = "h2", type = "[String; 4]", value = "藍寶石 | 貝殼 | 紅寶石", state = "live" },
+]
+pointers = [
+  { from = "trip.bag", to = "h2", kind = "own" },
+  { from = "put_in.bag", to = "trip.bag", kind = "mut" },
+]
+
+[[memory_snapshots.frames]]
+id = "trip"
+fn = "trip"
+vars = [
+  { id = "trip.bag", name = "bag", type = "Vec<String>", value = "len=3 cap=4", state = "live" },
+  { id = "trip.before", name = "before", type = "usize", value = "1", state = "live" },
+]
+
+[[memory_snapshots.frames]]
+id = "put_in"
+fn = "put_in"
+vars = [
+  { id = "put_in.bag", name = "bag", type = "&mut Vec<String>", state = "live" },
+  { id = "put_in.item", name = "item", type = "&str", value = "\"紅寶石\"", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 7
+note = "借用都已歸還，bag 一直都是 Ferris 的；回傳時才把擁有權交給呼叫端"
+heap = [
+  { id = "h2", type = "[String; 4]", value = "藍寶石 | 貝殼 | 紅寶石", state = "live" },
+]
+pointers = [
+  { from = "trip.bag", to = "h2", kind = "own" },
+]
+
+[[memory_snapshots.frames]]
+id = "trip"
+fn = "trip"
+vars = [
+  { id = "trip.bag", name = "bag", type = "Vec<String>", value = "len=3 cap=4", state = "live" },
+  { id = "trip.before", name = "before", type = "usize", value = "1", state = "live" },
+  { id = "trip.after", name = "after", type = "usize", value = "2", state = "live" },
+]

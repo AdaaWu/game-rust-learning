@@ -1,0 +1,47 @@
+id = "07-exhaustive-match"
+chapter = 2
+order = 7
+title = "羅盤多了斜角"
+kind = "fix-compile"
+visual = "grid"
+
+story = """
+神殿深處是一道往右下延伸的階梯，老海龜幫我的羅盤刻上了新方向 `DownRight`。
+我才剛把新方向加進 enum，編譯器就一口氣點名了好幾個 match，說它們沒處理斜角。
+海鷗在旁邊嘀咕：「咦，怎麼有一個 match 沒被點名？那個才可疑吧。」
+"""
+
+concept = """
+## 窮舉檢查（exhaustiveness）
+
+- `match` 必須涵蓋 enum 的**每一種**可能，少一個就編譯失敗：**E0004** non-exhaustive patterns
+- 錯誤訊息會直接列出漏掉的那個，例如 `` `Dir::DownRight` not covered ``
+- 好處：替 enum 加新成員時，編譯器會帶你走遍每個需要更新的地方
+
+## 萬用分支 `_` 的代價
+
+- `_ => ...` 會接住「其他所有情況」，**包含以後才加進來的成員**
+- 限制：match 裡只要有 `_`，之後再替 enum 新增成員，編譯器**不會再提醒**這個 match，窮舉檢查等於關掉了
+- 本關的 `cost` 就是例子：加了 `DownRight` 後它沒被點名，新方向默默走進 `_` 的預設值
+- 這種錯編譯得過，只能靠測試或執行結果才抓得到
+
+## 取捨
+
+- 成員不多、每個都有意義：把每個成員明確列出來，讓編譯器幫你把關
+- 真的「其他都一樣」才用 `_`；多個成員同一個結果可以寫 `Dir::Left | Dir::Right => ...`
+- 斜角在格子上要拆成兩個指令：Ferris 只聽得懂上下左右
+"""
+
+hints = [
+  "編譯器點名了 commands 和 delta 兩個 match，各補一個 Dir::DownRight 分支",
+  "斜角往右下：位移是 x、y 各加 1；指令要拆成先 MOVE DOWN 再 MOVE RIGHT",
+  "修完編譯錯誤後送出，看看 cost 的測試：cost 裡的 _ 分支讓 DownRight 只花 1 點體力",
+  "把 cost 的 _ 換成明確分支：DownRight 回傳 2，其餘寫成 Dir::Down | Dir::Left | Dir::Right => 1；下次再加方向時，編譯器才會點名這裡",
+]
+
+[grid]
+width  = 6
+height = 4
+start  = [0, 0]
+goal   = [5, 3]
+walls  = [[2, 0], [3, 0], [4, 0], [5, 0], [0, 1], [3, 1], [4, 1], [5, 1], [0, 2], [1, 2], [4, 2], [5, 2], [0, 3], [1, 3], [2, 3]]

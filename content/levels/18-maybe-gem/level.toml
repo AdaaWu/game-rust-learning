@@ -1,0 +1,50 @@
+id = "18-maybe-gem"
+chapter = 5
+order = 18
+title = "也許有寶石"
+kind = "build"
+visual = "grid"
+
+story = """
+離開古碑遺跡後，我抱著一塊浮木漂了三天，被沖上一座滿是漂流瓶與寶箱的小島。
+海鷗說這些寶箱「也許有寶石」，有些裝著珍珠，有些只裝著海水。
+空箱子也伸手去撿，我就會撲空跌倒，所以每一箱都要先看清楚再動手。
+"""
+
+concept = """
+## Option：把「可能沒有」寫進型別
+
+- `Option<T>` 只有兩種值：`Some(值)` 或 `None`
+- Rust 沒有 null，「寶箱可能是空的」直接寫成 `Option<&str>`
+- 編譯器會逼你處理 `None`，不會忘記檢查
+
+## match：兩種情況都要寫
+
+- `match chest { Some(name) => ..., None => ... }`
+- `Some(name)` 會把裡面的值取出來，綁定到 `name`
+- 少寫 `None` 分支，編譯器會拒絕（E0004）
+
+## if let：只關心其中一種
+
+- `if let Some(name) = chest { ... }`：只有 `Some` 才執行區塊
+- 等於只寫一個分支的 `match`，`None` 時什麼都不做
+- 取捨：兩種情況都要處理用 `match`；只在乎有值的情況用 `if let`，程式更短
+
+## 不是指令的行
+
+- `println!("寶箱裡有珍珠")` 這類含中文的行只出現在主控台，不影響 Ferris
+"""
+
+hints = [
+  "describe 要處理有寶石與空箱兩種情況，用 match 各寫一個分支",
+  "Some(name) 分支用 format! 把名字接在「寶箱裡有」後面，None 分支回傳「空箱子」",
+  "route 迴圈裡寫 if let Some(_) = chest，區塊內 push PICK，空箱就什麼都不做",
+]
+
+[grid]
+width  = 6
+height = 2
+start  = [0, 0]
+goal   = [5, 1]
+walls  = [[0, 1], [1, 1], [2, 1], [3, 1], [4, 1]]
+gems   = [[2, 0], [4, 0]]

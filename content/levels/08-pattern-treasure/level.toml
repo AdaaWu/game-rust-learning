@@ -1,0 +1,46 @@
+id = "08-pattern-treasure"
+chapter = 2
+order = 8
+title = "寶石鑑定"
+kind = "build"
+visual = "grid"
+
+story = """
+走下階梯，神殿最底層是一條寶物長廊，地上有沙、有上鎖的門，還有大小不一的寶石。
+老海龜說每顆寶石都刻著分數，10 分以上的稀有寶石鑑定後價值加倍。
+我要一邊沿著長廊前進、一邊開門撿寶石，最後報出總分，才能離開潮汐神殿。
+"""
+
+concept = """
+## 帶資料的 enum
+
+- `Tile::Gem(u32)`：成員可以夾帶資料，寶石的分數就跟著這一格走
+- 同一個 enum 裡可以混用：`Sand`、`Door` 沒有資料，`Gem(u32)` 有
+
+## 用 pattern 拆開資料
+
+- `Tile::Gem(v) => ...`：比對成功時，把裡面的分數綁到變數 `v`
+- **guard**：`Tile::Gem(v) if v >= 10 => v * 2`，pattern 對上**且**條件成立才走這個分支
+- match 由上往下比對，guard 不成立會繼續往下找，所以「條件比較嚴」的分支要放前面
+- 解構 tuple：`let (cmds, total) = appraise(&SHORE);` 一次拿出兩個值
+
+## 取捨
+
+- 帶資料的 enum 把「這一格是什麼」和「附帶的數值」綁在一起，不會出現「是沙卻有分數」的矛盾狀態
+- guard 不參與窮舉檢查：寫了 `Tile::Gem(v) if v >= 10`，仍然需要一個處理其他寶石的分支
+"""
+
+hints = [
+  "score 用 match 分三種情況：稀有寶石（加 guard）、一般寶石、其他格子",
+  "enter 的每個分支回傳一組指令：沙地只要 MOVE RIGHT；門要先 OPEN RIGHT 再 MOVE RIGHT；寶石要先 MOVE RIGHT 再 PICK",
+  "score 的第一個分支寫 Tile::Gem(v) if v >= 10 => v * 2，第二個寫 Tile::Gem(v) => v，最後用 Tile::Sand | Tile::Door => 0",
+]
+
+[grid]
+width  = 7
+height = 2
+start  = [0, 0]
+goal   = [6, 0]
+walls  = [[0, 1], [1, 1], [2, 1], [3, 1], [4, 1], [5, 1], [6, 1]]
+gems   = [[2, 0], [4, 0], [5, 0]]
+doors  = [[3, 0]]

@@ -1,0 +1,165 @@
+id = "14-missing-lifetime"
+chapter = 4
+order = 14
+title = "古碑上的兩個名字"
+kind = "fix-compile"
+visual = "memory"
+
+story = """
+游過所有權之海，我爬上一座長滿青苔的遺跡，這裡就是生命週期遺跡。
+入口的古碑刻著兩個名字，傳說較長的那個是遺跡的主人。
+我寫好比較字數的函式，編譯器卻反問：「你回傳的名字，是從哪一個借來的？」
+"""
+
+concept = """
+## 回傳參考時，編譯器要知道它從哪來
+
+- 回傳 `&str` 代表「借用某個東西」，編譯器必須確認那個東西活得比回傳值久
+- `clean(name: &str) -> &str` 只有一個參考輸入，**省略規則（lifetime elision）** 自動推斷：回傳值借自 `name`
+- `longer(a: &str, b: &str) -> &str` 有兩個參考輸入，可能回傳 `a` 也可能回傳 `b`，編譯器猜不出來，回報 **E0106** missing lifetime specifier
+
+## 生命週期標註 `'a`
+
+- `fn longer<'a>(a: &'a str, b: &'a str) -> &'a str`
+- 意思是：回傳值至少在 `a` 和 `b` **都還活著**的期間有效
+- 標註不會延長任何值的壽命，只是把「誰借誰」寫進簽名，讓編譯器在**呼叫端**檢查
+
+## 省略規則（三條）
+
+- 每個參考參數各自得到一個生命週期
+- 只有一個參考輸入時，回傳值沿用它
+- 方法有 `&self` 時，回傳值沿用 `self`（第 16 關會用到）
+
+## 取捨
+
+- 回傳 `&str`：零複製，但呼叫端必須讓兩個名字活得夠久
+- 回傳 `String`：呼叫端最自由，代價是多一次配置與複製
+"""
+
+hints = [
+  "錯誤指向 longer 的回傳型別：只看簽名，編譯器分不出回傳值借自 a 還是 b",
+  "為什麼 clean 不用標？它只有一個參考輸入，省略規則自動處理",
+  "在 longer 後面宣告 <'a>，讓 a、b 與回傳值都用 &'a str",
+]
+
+[[memory_snapshots]]
+line = 19
+note = "main 的 left、right 各自擁有古碑上的名字（前後還有青苔空白）"
+heap = [
+  { id = "h1", type = "str", value = "␠␠蟹王␠␠", state = "live" },
+  { id = "h2", type = "str", value = "␠海鷗守衛␠", state = "live" },
+]
+pointers = [
+  { from = "main.left", to = "h1", kind = "own" },
+  { from = "main.right", to = "h2", kind = "own" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.left", name = "left", type = "String", value = "len=10", state = "live" },
+  { id = "main.right", name = "right", type = "String", value = "len=14", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 3
+note = "`clean(name)` 只有一個參考輸入，回傳的 `&str` 一定借自 name：指向同一塊 heap、去掉空白的那一段"
+heap = [
+  { id = "h1", type = "str", value = "␠␠蟹王␠␠", state = "live" },
+  { id = "h2", type = "str", value = "␠海鷗守衛␠", state = "live" },
+]
+pointers = [
+  { from = "main.left", to = "h1", kind = "own" },
+  { from = "main.right", to = "h2", kind = "own" },
+  { from = "clean.name", to = "h1", kind = "shared" },
+  { from = "clean.ret", to = "h1", kind = "shared" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.left", name = "left", type = "String", value = "len=10", state = "live" },
+  { id = "main.right", name = "right", type = "String", value = "len=14", state = "live" },
+]
+
+[[memory_snapshots.frames]]
+id = "read_tablet"
+fn = "read_tablet"
+vars = [
+  { id = "read_tablet.left", name = "left", type = "&str", state = "live" },
+  { id = "read_tablet.right", name = "right", type = "&str", state = "live" },
+]
+
+[[memory_snapshots.frames]]
+id = "clean"
+fn = "clean"
+vars = [
+  { id = "clean.name", name = "name", type = "&str", state = "live" },
+  { id = "clean.ret", name = "（回傳值）", type = "&str", value = "\"蟹王\"", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 7
+note = "longer 有 a、b 兩個參考輸入，回傳值可能借自任一個；簽名沒寫清楚，編譯器回報 **E0106** missing lifetime specifier"
+error = { code = "E0106", target = "longer.ret" }
+heap = [
+  { id = "h1", type = "str", value = "␠␠蟹王␠␠", state = "live" },
+  { id = "h2", type = "str", value = "␠海鷗守衛␠", state = "live" },
+]
+pointers = [
+  { from = "main.left", to = "h1", kind = "own" },
+  { from = "main.right", to = "h2", kind = "own" },
+  { from = "longer.a", to = "h1", kind = "shared" },
+  { from = "longer.b", to = "h2", kind = "shared" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.left", name = "left", type = "String", value = "len=10", state = "live" },
+  { id = "main.right", name = "right", type = "String", value = "len=14", state = "live" },
+]
+
+[[memory_snapshots.frames]]
+id = "longer"
+fn = "longer"
+vars = [
+  { id = "longer.a", name = "a", type = "&str", value = "\"蟹王\"", state = "live" },
+  { id = "longer.b", name = "b", type = "&str", value = "\"海鷗守衛\"", state = "live" },
+  { id = "longer.ret", name = "（回傳值）", type = "&str", value = "借自 a？還是 b？", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 7
+note = "（修正後）`'a` 表示回傳值只在 a、b 都還活著時有效；這次借自 b，main 的 right 活得夠久，檢查通過"
+heap = [
+  { id = "h1", type = "str", value = "␠␠蟹王␠␠", state = "live" },
+  { id = "h2", type = "str", value = "␠海鷗守衛␠", state = "live" },
+]
+pointers = [
+  { from = "main.left", to = "h1", kind = "own" },
+  { from = "main.right", to = "h2", kind = "own" },
+  { from = "longer.a", to = "h1", kind = "shared" },
+  { from = "longer.b", to = "h2", kind = "shared" },
+  { from = "longer.ret", to = "h2", kind = "shared" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.left", name = "left", type = "String", value = "len=10", state = "live" },
+  { id = "main.right", name = "right", type = "String", value = "len=14", state = "live" },
+]
+
+[[memory_snapshots.frames]]
+id = "longer"
+fn = "longer"
+vars = [
+  { id = "longer.a", name = "a", type = "&'a str", value = "\"蟹王\"", state = "live" },
+  { id = "longer.b", name = "b", type = "&'a str", value = "\"海鷗守衛\"", state = "live" },
+  { id = "longer.ret", name = "（回傳值）", type = "&'a str", value = "\"海鷗守衛\"", state = "live" },
+]

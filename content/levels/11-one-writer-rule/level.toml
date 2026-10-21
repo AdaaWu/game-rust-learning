@@ -1,0 +1,122 @@
+id = "11-one-writer-rule"
+chapter = 3
+order = 11
+title = "一寫多讀"
+kind = "fix-compile"
+visual = "memory"
+
+story = """
+我想先記住背包裡第一樣寶物的名字，再把剛撿到的紅寶石放進去。
+很合理的兩個動作，編譯器卻說不行。
+海鷗歪著頭：「你手指還指著第一格，背包就要搬家了耶。」
+"""
+
+concept = """
+## 借用規則
+
+- 同一時間，二選一：
+  - 任意多個**共享借用** `&T`（只能讀）
+  - 恰好一個**可變借用** `&mut T`（可讀可寫）
+- 借用的有效範圍：從建立到**最後一次使用**為止（NLL，Non-Lexical Lifetimes：依實際使用位置判斷借用何時結束）
+
+## 為什麼 push 不能和 &bag[0] 共存
+
+- `push` 可能讓 `Vec` 容量不足而**重新配置**：搬到 heap 的新位置，舊位置釋放
+- `first` 還指著舊位置，就會變成懸空參考（dangling reference）
+- 其他語言要到執行期才出事，Rust 在編譯期用 **E0502** 擋下
+
+## 修法
+
+- 不要「拿著參考」跨過修改：先 `clone()` 成自己擁有的 `String`
+- 或把讀取移到修改之後
+"""
+
+hints = [
+  "錯誤訊息標了三個位置：哪裡借出、哪裡要可變借用、哪裡還在用第一個借用",
+  "first 是 &String，它在 push 之後才被使用，所以借用一直延續到 push 之後",
+  "把 let first = &bag[0]; 改成 let first = bag[0].clone();，最後直接回傳 first",
+]
+
+[[memory_snapshots]]
+line = 3
+note = "first 共享借用 bag 的第一格"
+heap = [
+  { id = "h1", type = "[String; 1]", value = "珍珠", state = "live" },
+]
+pointers = [
+  { from = "main.bag", to = "h1", kind = "own" },
+  { from = "first_then_add.bag", to = "main.bag", kind = "mut" },
+  { from = "first_then_add.first", to = "h1", kind = "shared" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.bag", name = "bag", type = "Vec<String>", value = "len=1 cap=1", state = "live" },
+]
+
+[[memory_snapshots.frames]]
+id = "first_then_add"
+fn = "first_then_add"
+vars = [
+  { id = "first_then_add.bag", name = "bag", type = "&mut Vec<String>", state = "live" },
+  { id = "first_then_add.first", name = "first", type = "&String", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 4
+note = "push 需要擴充容量，buffer 搬家，first 會指向已釋放的位置；編譯器回報 **E0502** cannot borrow `*bag` as mutable because it is also borrowed as immutable"
+error = { code = "E0502", target = "first_then_add.first" }
+heap = [
+  { id = "h1", type = "[String; 1]", value = "珍珠", state = "freed" },
+  { id = "h2", type = "[String; 4]", value = "珍珠 | 紅寶石", state = "live" },
+]
+pointers = [
+  { from = "main.bag", to = "h2", kind = "own" },
+  { from = "first_then_add.bag", to = "main.bag", kind = "mut" },
+  { from = "first_then_add.first", to = "h1", kind = "shared" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.bag", name = "bag", type = "Vec<String>", value = "len=2 cap=4", state = "live" },
+]
+
+[[memory_snapshots.frames]]
+id = "first_then_add"
+fn = "first_then_add"
+vars = [
+  { id = "first_then_add.bag", name = "bag", type = "&mut Vec<String>", state = "live" },
+  { id = "first_then_add.first", name = "first", type = "&String", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 4
+note = "（修正後）first 是 clone 出來的字串，擁有自己的 heap 資料，push 搬家不影響它"
+heap = [
+  { id = "h2", type = "[String; 4]", value = "珍珠 | 紅寶石", state = "live" },
+  { id = "h3", type = "str", value = "珍珠", state = "live" },
+]
+pointers = [
+  { from = "main.bag", to = "h2", kind = "own" },
+  { from = "first_then_add.bag", to = "main.bag", kind = "mut" },
+  { from = "first_then_add.first", to = "h3", kind = "own" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.bag", name = "bag", type = "Vec<String>", value = "len=2 cap=4", state = "live" },
+]
+
+[[memory_snapshots.frames]]
+id = "first_then_add"
+fn = "first_then_add"
+vars = [
+  { id = "first_then_add.bag", name = "bag", type = "&mut Vec<String>", state = "live" },
+  { id = "first_then_add.first", name = "first", type = "String", state = "live" },
+]

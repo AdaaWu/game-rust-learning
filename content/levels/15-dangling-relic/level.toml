@@ -1,0 +1,167 @@
+id = "15-dangling-relic"
+chapter = 4
+order = 15
+title = "帶不出的寶物"
+kind = "fix-compile"
+visual = "memory"
+
+story = """
+遺跡深處有座鑄造台，我用名字鑄了一頂寶冠，打算帶回地面。
+可是遺跡的門一關，裡面的東西就會化成沙。
+我手上只拿著一張寫著「寶冠在那裡」的紙條，回到地面才發現那裡什麼都沒了。
+"""
+
+concept = """
+## 懸空參考（dangling reference）
+
+- 區域變數在作用域結束時被 drop，heap 資料跟著釋放
+- 參考如果比它指向的值活得久，就會指向已釋放的記憶體
+- Rust 在編譯期擋下兩種情況：
+  - **E0515**：函式回傳指向區域變數的參考（cannot return reference to local variable）
+  - **E0597**：參考被帶出區塊，但值在區塊結尾就被釋放（does not live long enough）
+
+## 為什麼標 `'a` 救不了
+
+- 生命週期標註只**描述**借用關係，不會延長值的壽命
+- `relic` 在函式結束時一定會被 drop，沒有任何 `'a` 能讓它活下來
+
+## 修法：交出擁有權
+
+- 不要回傳「寶物在哪」，直接把**寶物本身**交出去
+- `forge_relic` 回傳 `String`：值被 move 給呼叫端，heap 資料不會被釋放
+- `escape` 把 `relic` move 進外層的 `carried: String`，區塊結束時 `relic` 已經是空的，沒有東西被 drop
+
+## 取捨
+
+- 回傳參考：零複製，但只能借「呼叫端本來就有」的東西
+- 回傳擁有權：函式內新產生的值只能這樣帶出去，成本只是搬動 24 bytes 的 String 標頭，不複製字元
+"""
+
+hints = [
+  "兩個錯誤是同一件事：relic 在作用域結束就被釋放，參考卻還想用它",
+  "relic 是函式（或區塊）裡新產生的 String，參考帶不出去，要把 String 本身帶出去",
+  "forge_relic 改回傳 String 並直接回傳 relic；escape 把 carried 改成 String，用 carried = relic; 把寶冠搬出來",
+]
+
+[[memory_snapshots]]
+line = 3
+note = "forge_relic 在 heap 上鑄造「蟹王之冠」，擁有者是區域變數 relic"
+heap = [
+  { id = "h1", type = "str", value = "蟹王之冠", state = "live" },
+]
+pointers = [
+  { from = "forge_relic.relic", to = "h1", kind = "own" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = []
+
+[[memory_snapshots.frames]]
+id = "forge_relic"
+fn = "forge_relic"
+vars = [
+  { id = "forge_relic.name", name = "name", type = "&str", value = "\"蟹王\"", state = "live" },
+  { id = "forge_relic.relic", name = "relic", type = "String", value = "len=12", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 4
+note = "回傳 `&relic` 後函式結束，relic 被 drop、寶冠化成沙，main 拿到的參考指向已釋放的位置；編譯器回報 **E0515** cannot return reference to local variable `relic`"
+error = { code = "E0515", target = "main.crown" }
+heap = [
+  { id = "h1", type = "str", value = "蟹王之冠", state = "freed" },
+]
+pointers = [
+  { from = "main.crown", to = "h1", kind = "shared" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.crown", name = "（回傳值）", type = "&str", state = "live" },
+]
+
+[[memory_snapshots.frames]]
+id = "forge_relic"
+fn = "forge_relic"
+vars = [
+  { id = "forge_relic.name", name = "name", type = "&str", value = "\"蟹王\"", state = "live" },
+  { id = "forge_relic.relic", name = "relic", type = "String", state = "dropped" },
+]
+
+[[memory_snapshots]]
+line = 12
+note = "escape 的區塊內，carried 借用 relic：寶冠還在，參考有效"
+heap = [
+  { id = "h2", type = "str", value = "海鷗的寶冠", state = "live" },
+]
+pointers = [
+  { from = "escape.relic", to = "h2", kind = "own" },
+  { from = "escape.carried", to = "escape.relic", kind = "shared" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = []
+
+[[memory_snapshots.frames]]
+id = "escape"
+fn = "escape"
+vars = [
+  { id = "escape.name", name = "name", type = "&str", value = "\"海鷗\"", state = "live" },
+  { id = "escape.carried", name = "carried", type = "&String", state = "live" },
+  { id = "escape.relic", name = "relic", type = "String", value = "len=15", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 13
+note = "遺跡關門：區塊結束，relic 被 drop，carried 卻還要在第 14 行使用；編譯器回報 **E0597** `relic` does not live long enough"
+error = { code = "E0597", target = "escape.carried" }
+heap = [
+  { id = "h2", type = "str", value = "海鷗的寶冠", state = "freed" },
+]
+pointers = [
+  { from = "escape.carried", to = "escape.relic", kind = "shared" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = []
+
+[[memory_snapshots.frames]]
+id = "escape"
+fn = "escape"
+vars = [
+  { id = "escape.name", name = "name", type = "&str", value = "\"海鷗\"", state = "live" },
+  { id = "escape.carried", name = "carried", type = "&String", state = "live" },
+  { id = "escape.relic", name = "relic", type = "String", state = "dropped" },
+]
+
+[[memory_snapshots]]
+line = 13
+note = "（修正後）`carried = relic;` 把擁有權搬到區塊外，關門時 relic 已是 moved，寶冠完整帶出遺跡"
+heap = [
+  { id = "h2", type = "str", value = "海鷗的寶冠", state = "live" },
+]
+pointers = [
+  { from = "escape.carried", to = "h2", kind = "own" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = []
+
+[[memory_snapshots.frames]]
+id = "escape"
+fn = "escape"
+vars = [
+  { id = "escape.name", name = "name", type = "&str", value = "\"海鷗\"", state = "live" },
+  { id = "escape.carried", name = "carried", type = "String", value = "len=15", state = "live" },
+  { id = "escape.relic", name = "relic", type = "String", state = "moved" },
+]

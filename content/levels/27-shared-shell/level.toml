@@ -1,0 +1,151 @@
+id = "27-shared-shell"
+chapter = 7
+order = 27
+title = "共用貝殼屋"
+kind = "build"
+visual = "memory"
+
+story = """
+洞窟深處有一間好大的粉紅螺殼，我和阿殼、小紅決定一起住。
+上一關的 Box 只能有一個主人，可是這間屋子我們三隻都要拿鑰匙。
+海鷗提醒我：「別傻傻再蓋三間一樣的房子，打三把鑰匙就好。」
+"""
+
+concept = """
+## Rc：多個擁有者共用同一份資料
+
+- `Rc<T>`：**Reference Counting（參考計數）** 智慧指標，資料放在 heap，旁邊記一個 **strong count**
+- `Rc::clone(&rc)`：**不複製資料**，只把 strong count 加 1，拿到另一把指向同一處的鑰匙
+- 任何一個 `Rc` 被 drop，strong count 減 1；歸零時才真正釋放 heap 資料
+
+## 觀察計數
+
+- `Rc::strong_count(&rc)`：目前有幾個 `Rc` 指著這份資料（包含你手上這個）
+- `Rc::ptr_eq(&a, &b)`：兩把鑰匙是不是開同一扇門
+
+## 移出欄位也是 move
+
+- `let Crab { home, .. } = crab;` 把 `home` 從 `crab` 裡**搬出來**：只是換手，計數不變
+- 其他欄位（例如 `name`）在這裡就被 drop
+
+## 取捨
+
+- 優點：多個擁有者，誰最後離開誰負責釋放
+- 代價：每次 clone／drop 都要更新計數；`Rc` 只給**共享參考**，不能直接修改內容（要改得配 `RefCell`，下一關）；只能在單一執行緒用
+"""
+
+hints = [
+  "三個 todo!() 都和 strong count 有關：誰手上拿著 Rc，誰就算一把鑰匙",
+  "move_in 不要重蓋一間 Shell，home 欄位用 Rc::clone(home)；keys 用 Rc::strong_count",
+  "move_out 先把 home 從 crab 搬出來，這時 home 自己也算一把鑰匙，回傳的計數要扣掉它",
+]
+
+[[memory_snapshots]]
+line = 31
+note = "`Rc::new` 把貝殼屋放到 heap，旁邊記著 strong=1"
+heap = [
+  { id = "h1", type = "RcBox<Shell>", value = "粉紅螺殼 · 3 房 · strong=1 weak=0", state = "live" },
+]
+pointers = [
+  { from = "main.shell", to = "h1", kind = "own" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.shell", name = "shell", type = "Rc<Shell>", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 34
+note = "三隻螃蟹各用 `Rc::clone` 拿到一把鑰匙：heap 上還是只有一間屋子，strong 變成 4"
+heap = [
+  { id = "h1", type = "RcBox<Shell>", value = "粉紅螺殼 · 3 房 · strong=4 weak=0", state = "live" },
+]
+pointers = [
+  { from = "main.shell", to = "h1", kind = "own" },
+  { from = "main.ferris", to = "h1", kind = "own" },
+  { from = "main.hermit", to = "h1", kind = "own" },
+  { from = "main.fiddler", to = "h1", kind = "own" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.shell", name = "shell", type = "Rc<Shell>", state = "live" },
+  { id = "main.ferris", name = "ferris", type = "Crab", value = "name: Ferris", state = "live" },
+  { id = "main.hermit", name = "hermit", type = "Crab", value = "name: 阿殼", state = "live" },
+  { id = "main.fiddler", name = "fiddler", type = "Crab", value = "name: 小紅", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 26
+note = "（修正後）阿殼整隻 move 進 `move_out`，`home` 被搬出來：鑰匙只是換手，strong 仍是 4"
+heap = [
+  { id = "h1", type = "RcBox<Shell>", value = "粉紅螺殼 · 3 房 · strong=4 weak=0", state = "live" },
+]
+pointers = [
+  { from = "main.shell", to = "h1", kind = "own" },
+  { from = "main.ferris", to = "h1", kind = "own" },
+  { from = "main.fiddler", to = "h1", kind = "own" },
+  { from = "move_out.home", to = "h1", kind = "own" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.shell", name = "shell", type = "Rc<Shell>", state = "live" },
+  { id = "main.ferris", name = "ferris", type = "Crab", value = "name: Ferris", state = "live" },
+  { id = "main.hermit", name = "hermit", type = "Crab", state = "moved" },
+  { id = "main.fiddler", name = "fiddler", type = "Crab", value = "name: 小紅", state = "live" },
+]
+
+[[memory_snapshots.frames]]
+id = "move_out"
+fn = "move_out"
+vars = [
+  { id = "move_out.home", name = "home", type = "Rc<Shell>", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 37
+note = "`move_out` 回傳 4 − 1 = 3 後結束，`home` 被 drop，strong 減成 3；屋子還在"
+heap = [
+  { id = "h1", type = "RcBox<Shell>", value = "粉紅螺殼 · 3 房 · strong=3 weak=0", state = "live" },
+]
+pointers = [
+  { from = "main.shell", to = "h1", kind = "own" },
+  { from = "main.ferris", to = "h1", kind = "own" },
+  { from = "main.fiddler", to = "h1", kind = "own" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.shell", name = "shell", type = "Rc<Shell>", state = "live" },
+  { id = "main.ferris", name = "ferris", type = "Crab", value = "name: Ferris", state = "live" },
+  { id = "main.hermit", name = "hermit", type = "Crab", state = "moved" },
+  { id = "main.fiddler", name = "fiddler", type = "Crab", value = "name: 小紅", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 38
+note = "main 結束，三把鑰匙依序 drop，strong 歸零，貝殼屋才真正釋放"
+heap = [
+  { id = "h1", type = "RcBox<Shell>", value = "粉紅螺殼 · 3 房 · strong=0 weak=0", state = "freed" },
+]
+pointers = []
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.shell", name = "shell", type = "Rc<Shell>", state = "dropped" },
+  { id = "main.ferris", name = "ferris", type = "Crab", state = "dropped" },
+  { id = "main.hermit", name = "hermit", type = "Crab", state = "moved" },
+  { id = "main.fiddler", name = "fiddler", type = "Crab", state = "dropped" },
+]

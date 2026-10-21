@@ -1,0 +1,124 @@
+id = "12-two-claws"
+chapter = 3
+order = 12
+title = "兩隻鉗子"
+kind = "fix-compile"
+visual = "memory"
+
+story = """
+我撿到一顆珍珠，想用左鉗擦亮、右鉗刻上名字。
+兩隻鉗子同時伸出去抓住它，感覺效率加倍。
+編譯器卻大喊：「同一顆寶石，一次只能有一隻鉗子能改！」
+"""
+
+concept = """
+## 同一時間只能有一個 `&mut`
+
+- 可變借用是**獨佔**的：`&mut gem` 存在的期間，不能再有第二個 `&mut gem`，也不能有 `&gem`
+- 違反時編譯器回報 **E0499** cannot borrow as mutable more than once at a time
+- 借用的範圍算到**最後一次使用**（NLL）：只要 `left` 之後還會被用到，它就還沒歸還
+
+## 為什麼要這麼嚴格
+
+- 兩個可寫的參考指向同一份資料，就是 **data race（資料競爭）** 與**迭代器失效**的根源
+- 單執行緒也會出事：一邊 `push` 讓字串搬家，另一邊還拿著舊位置
+- Rust 在編譯期就排除，執行期不用加鎖、也不會有怪 bug
+
+## 修法
+
+- **輪流用**：讓 `left` 用完（最後一次使用）之後，再建立 `right`
+- 或乾脆不存變數：`polish(&mut gem); engrave(&mut gem, name);`，每次呼叫各借一次
+
+## 延伸
+
+- 想同時改 Vec 的**不同元素**時，`&mut v[0]` 和 `&mut v[1]` 一樣會被擋，因為編譯器只看到「借了整個 v 兩次」
+- 那時要用 `split_at_mut` 把一個 slice 切成兩段不重疊的 `&mut`
+"""
+
+hints = [
+  "錯誤訊息標出兩個 &mut gem：第一個借用一直活到哪一行才最後使用？",
+  "left 在 polish(left) 才最後一次使用，但 right 在那之前就建立了，兩隻鉗子重疊",
+  "把 let right = &mut gem; 移到 polish(left); 之後，讓兩個可變借用輪流出現",
+]
+
+[[memory_snapshots]]
+line = 15
+note = "gem 擁有 heap 上的字串「珍珠」"
+heap = [
+  { id = "h1", type = "str", value = "珍珠", state = "live" },
+]
+pointers = [
+  { from = "two_claws.gem", to = "h1", kind = "own" },
+]
+
+[[memory_snapshots.frames]]
+id = "two_claws"
+fn = "two_claws"
+vars = [
+  { id = "two_claws.raw", name = "raw", type = "&str", value = "\"珍珠\"", state = "live" },
+  { id = "two_claws.gem", name = "gem", type = "String", value = "len=6 cap=6", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 16
+note = "左鉗 `left` 取得可變借用，gem 暫時只能透過 left 修改"
+heap = [
+  { id = "h1", type = "str", value = "珍珠", state = "live" },
+]
+pointers = [
+  { from = "two_claws.gem", to = "h1", kind = "own" },
+  { from = "two_claws.left", to = "two_claws.gem", kind = "mut" },
+]
+
+[[memory_snapshots.frames]]
+id = "two_claws"
+fn = "two_claws"
+vars = [
+  { id = "two_claws.raw", name = "raw", type = "&str", value = "\"珍珠\"", state = "live" },
+  { id = "two_claws.gem", name = "gem", type = "String", value = "len=6 cap=6", state = "live" },
+  { id = "two_claws.left", name = "left", type = "&mut String", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 17
+note = "left 在第 18 行還要用，右鉗又來借：兩個 `&mut` 同時指向 gem，編譯器回報 **E0499** cannot borrow `gem` as mutable more than once at a time"
+error = { code = "E0499", target = "two_claws.right" }
+heap = [
+  { id = "h1", type = "str", value = "珍珠", state = "live" },
+]
+pointers = [
+  { from = "two_claws.gem", to = "h1", kind = "own" },
+  { from = "two_claws.left", to = "two_claws.gem", kind = "mut" },
+  { from = "two_claws.right", to = "two_claws.gem", kind = "mut" },
+]
+
+[[memory_snapshots.frames]]
+id = "two_claws"
+fn = "two_claws"
+vars = [
+  { id = "two_claws.raw", name = "raw", type = "&str", value = "\"珍珠\"", state = "live" },
+  { id = "two_claws.gem", name = "gem", type = "String", value = "len=6 cap=6", state = "live" },
+  { id = "two_claws.left", name = "left", type = "&mut String", state = "live" },
+  { id = "two_claws.right", name = "right", type = "&mut String", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 18
+note = "（修正後）left 在 `polish(left)` 用完就歸還，這時才讓右鉗 right 借用，同一時間只有一個 `&mut`"
+heap = [
+  { id = "h2", type = "str", value = "珍珠✨", state = "live" },
+]
+pointers = [
+  { from = "two_claws.gem", to = "h2", kind = "own" },
+  { from = "two_claws.right", to = "two_claws.gem", kind = "mut" },
+]
+
+[[memory_snapshots.frames]]
+id = "two_claws"
+fn = "two_claws"
+vars = [
+  { id = "two_claws.raw", name = "raw", type = "&str", value = "\"珍珠\"", state = "live" },
+  { id = "two_claws.gem", name = "gem", type = "String", value = "len=9 cap=12", state = "live" },
+  { id = "two_claws.left", name = "left", type = "&mut String", value = "借用已結束", state = "live" },
+  { id = "two_claws.right", name = "right", type = "&mut String", state = "live" },
+]

@@ -1,0 +1,45 @@
+id = "23-generic-bag"
+chapter = 6
+order = 23
+title = "萬用寶物袋"
+kind = "fix-compile"
+visual = "none"
+
+story = """
+老工匠送我一個萬用寶物袋：寶石、單字、貝殼，什麼都裝得下。
+袋子上有個按鈕，按下去會挑出袋裡「最大」的那一個。
+可是我一按，編譯器就連聲追問：「這東西能比大小嗎？」「這東西能印出來嗎？」
+海鷗說：萬用不代表什麼都會，要先講好它會什麼。
+"""
+
+concept = """
+## 泛型：一份程式碼，很多種型別
+
+- `fn largest<T>(items: &[T])`：`T` 是型別參數，呼叫時才決定是 `i32`、`&str` 還是 `Shell`
+- 編譯器替每個實際型別各產生一份程式碼（單型化），沒有執行期成本
+
+## trait bound：講好 T 會什麼
+
+- 沒有任何限制的 `T`，編譯器只能假設它**什麼都不會**
+- 想用 `>` 比大小，`T` 必須實作 `PartialOrd`：寫成 `<T: PartialOrd>`
+- 想用 `{:?}` 印出來，`T` 必須實作 `Debug`：寫成 `<T: std::fmt::Debug>`
+- 多個條件用 `+` 連起來，例如 `T: PartialOrd + Debug`；條件多時可改寫在 `where` 子句
+
+## 讀懂這兩個錯誤
+
+- **E0369**：`binary operation > cannot be applied to type &T`，運算子沒有對應的 trait
+- **E0277**：`T doesn't implement Debug` 或 `the trait bound ... is not satisfied`，型別缺少要求的 trait
+- 編譯器的 help 通常會直接建議要加哪個 bound
+
+## derive 讓自訂型別達成條件
+
+- 加上 bound 之後，呼叫端傳入的型別也要真的實作它
+- `#[derive(PartialOrd)]` 會依欄位宣告順序逐一比較，所以 `Shell` 先比 `size`
+- 取捨：derive 最省事，但比較規則綁死在欄位順序；想自訂規則就要手寫 `impl PartialOrd`
+"""
+
+hints = [
+  "兩個錯誤都在問 T 會不會某件事：largest 需要比大小，label 需要印出來",
+  "在 <T> 後面加上 trait bound，編譯器的 help 會告訴你是哪兩個 trait；加完之後再看一次新的錯誤",
+  "最後一個錯誤指著 largest(&shells)：Shell 還不會比大小，在它的 derive 裡補上缺少的那個 trait",
+]

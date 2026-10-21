@@ -1,0 +1,152 @@
+id = "28-refcell-panic"
+chapter = 7
+order = 28
+title = "寶物箱卡住了"
+kind = "debug"
+visual = "memory"
+
+story = """
+我和海鷗合買了一個寶物箱，用 Rc 讓我們都能拿著鑰匙。
+因為兩個都要往裡面放東西，箱子外面又套了一層 RefCell。
+規則很簡單：重複的寶物不放，新的才放。
+可是我第一次放海星，箱子就「喀」一聲卡死了。
+"""
+
+concept = """
+## Rc<RefCell<T>>：共享又可修改
+
+- `Rc<T>`：多個擁有者共享同一份資料，`Rc::clone` 只加**參考計數**
+- `RefCell<T>`：**interior mutability（內部可變性）**，透過共享參考也能修改內容
+- 合起來就是「多人共用、大家都能改」
+
+## 代價：借用規則延後到執行期
+
+- `borrow()` 拿到 `Ref`（共享借用），`borrow_mut()` 拿到 `RefMut`（可變借用）
+- 規則和編譯期一樣：多個 `Ref` 或一個 `RefMut`
+- 違反時不是編譯錯誤，而是**執行時 panic**（BorrowMutError）
+- `Ref` 要等變數離開作用域（或 `drop`）才歸還
+
+## Debug 心法
+
+- 找出 panic 當下「還活著的 Ref」是哪個變數
+- 縮短借用：用完立刻結束，不要把 `Ref` 存在變數裡跨過 `borrow_mut()`
+
+## 2024 edition：if let 暫存值提早釋放
+
+- `if let Some(x) = c.borrow().items.first() { .. } else { c.borrow_mut() .. }`
+- 2021：scrutinee 的 `Ref` 活到整個 `else` 結束，`else` 裡 `borrow_mut()` 會 panic
+- 2024：`Ref` 在進入 `else` 前就釋放，不再 panic
+- 但 `then` 區塊內仍持有 `Ref`，在那裡 `borrow_mut()` 依然 panic
+"""
+
+hints = [
+  "panic 訊息提到 already borrowed，代表 borrow_mut 時還有人在借",
+  "view 是 chest.borrow() 回傳的 Ref，它活到函式最後一行",
+  "先算出 exists 這個 bool，讓 borrow() 在同一行結束；需要時再 borrow_mut 放入，最後重新 borrow() 取長度",
+]
+
+[[memory_snapshots]]
+line = 21
+note = "chest 與 gull 共享同一個寶物箱，strong = 2"
+heap = [
+  { id = "h1", type = "RcBox<RefCell<Chest>>", value = "items: [珍珠] · strong=2 weak=0 · 借用：無", state = "live" },
+]
+pointers = [
+  { from = "main.chest", to = "h1", kind = "own" },
+  { from = "main.gull", to = "h1", kind = "own" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.chest", name = "chest", type = "Rc<RefCell<Chest>>", state = "live" },
+  { id = "main.gull", name = "gull", type = "Rc<RefCell<Chest>>", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 11
+note = "view 取得共享借用，RefCell 記下 1 個共享借用"
+heap = [
+  { id = "h1", type = "RcBox<RefCell<Chest>>", value = "items: [珍珠] · strong=2 weak=0 · 借用：1 個共享", state = "live" },
+]
+pointers = [
+  { from = "main.chest", to = "h1", kind = "own" },
+  { from = "main.gull", to = "h1", kind = "own" },
+  { from = "deposit.chest", to = "main.chest", kind = "shared" },
+  { from = "deposit.view", to = "h1", kind = "shared" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.chest", name = "chest", type = "Rc<RefCell<Chest>>", state = "live" },
+  { id = "main.gull", name = "gull", type = "Rc<RefCell<Chest>>", state = "live" },
+]
+
+[[memory_snapshots.frames]]
+id = "deposit"
+fn = "deposit"
+vars = [
+  { id = "deposit.chest", name = "chest", type = "&Rc<RefCell<Chest>>", state = "live" },
+  { id = "deposit.view", name = "view", type = "Ref<Chest>", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 15
+note = "view 還沒歸還就要 `borrow_mut()`，執行期 panic：RefCell already borrowed"
+error = { target = "deposit.view" }
+heap = [
+  { id = "h1", type = "RcBox<RefCell<Chest>>", value = "items: [珍珠] · strong=2 weak=0 · 借用：1 個共享", state = "live" },
+]
+pointers = [
+  { from = "main.chest", to = "h1", kind = "own" },
+  { from = "main.gull", to = "h1", kind = "own" },
+  { from = "deposit.chest", to = "main.chest", kind = "shared" },
+  { from = "deposit.view", to = "h1", kind = "shared" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.chest", name = "chest", type = "Rc<RefCell<Chest>>", state = "live" },
+  { id = "main.gull", name = "gull", type = "Rc<RefCell<Chest>>", state = "live" },
+]
+
+[[memory_snapshots.frames]]
+id = "deposit"
+fn = "deposit"
+vars = [
+  { id = "deposit.chest", name = "chest", type = "&Rc<RefCell<Chest>>", state = "live" },
+  { id = "deposit.view", name = "view", type = "Ref<Chest>", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 13
+note = "（修正後）共享借用在算出 exists 那行就歸還，再取得可變借用放入海星"
+heap = [
+  { id = "h1", type = "RcBox<RefCell<Chest>>", value = "items: [珍珠, 海星] · strong=2 weak=0 · 借用：可變", state = "live" },
+]
+pointers = [
+  { from = "main.chest", to = "h1", kind = "own" },
+  { from = "main.gull", to = "h1", kind = "own" },
+  { from = "deposit.chest", to = "main.chest", kind = "shared" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.chest", name = "chest", type = "Rc<RefCell<Chest>>", state = "live" },
+  { id = "main.gull", name = "gull", type = "Rc<RefCell<Chest>>", state = "live" },
+]
+
+[[memory_snapshots.frames]]
+id = "deposit"
+fn = "deposit"
+vars = [
+  { id = "deposit.chest", name = "chest", type = "&Rc<RefCell<Chest>>", state = "live" },
+  { id = "deposit.exists", name = "exists", type = "bool", value = "false", state = "live" },
+]
