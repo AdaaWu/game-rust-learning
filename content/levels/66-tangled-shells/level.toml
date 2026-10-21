@@ -1,0 +1,188 @@
+id = "66-tangled-shells"
+chapter = 13
+order = 66
+title = "糾纏的貝殼"
+kind = "debug"
+visual = "memory"
+
+story = """
+第七道試煉是一片貝殼灘，蛤蜊殼和海螺殼互相當鄰居，有珍珠就分給對方一顆。
+我才剛開始分珍珠，程式就 panic 了，說有東西已經被借走。
+海鷗說這種事修好一個，下一個才會冒出來，而且下一個連聲音都沒有。
+試煉結束時，貝殼應該都要回到海底，我得確定牠們真的回去了。
+"""
+
+concept = """
+## 複習：RefCell 的借用在執行期檢查（第 28 關）
+
+- `borrow()` 拿到 `Ref`、`borrow_mut()` 拿到 `RefMut`，規則和編譯期一樣：**多個讀或一個寫**
+- 違反規則不會編譯失敗，而是執行到那一行才 **panic**：`RefCell already borrowed`
+- `let left = shell.pearls.borrow();` 讓 `left` 一直借著到函式結束，迴圈裡的 `borrow_mut()` 就撞上了
+- 修法：需要讀的時候才借，用完馬上放（把 `borrow()` 寫在 `if` 條件裡，條件算完就歸還）
+
+## 複習：Rc 循環造成洩漏（第 29 關）
+
+- 兩個貝殼用 `Rc` 互相指著，外面的變數 drop 後，strong count 還各剩 1，**永遠不會釋放**
+- 沒有 panic、沒有錯誤訊息，`Drop` 裡的「回到海底」永遠不會印出來
+- 修法：鄰居之間只是「認識」，不擁有，改用 `Weak`：連結用 `Rc::downgrade`，使用時 `upgrade()`
+
+## 一個 bug 遮住另一個
+
+- D5 等級：panic 讓程式在洩漏發生之前就停了，你根本看不到第二個 bug
+- 修好 panic 之後，程式「看起來正常」，只有測試和記憶體圖會告訴你貝殼沒有回到海底
+- 心態：修好一個 bug 之後，**重新跑一次全部測試**，不要以為只有一個
+
+## 不要用 clone 逃避共享
+
+- 把鄰居換成另一個同名的複本，就沒有循環、也沒有借用衝突
+- 代價：珍珠分給了複本，真正的鄰居什麼都沒收到；共享的意義就消失了
+- `Rc::ptr_eq` 可以檢查兩個 `Rc` 是不是指向**同一個**值
+
+## Debug 心法
+
+- panic 先看訊息與行號，找出「誰還借著沒還」
+- 沒有訊息的 bug，看記憶體圖：離開作用域後 heap 區塊有沒有變成 freed？strong count 是多少？
+"""
+
+hints = [
+  "panic 說有東西已經被借走：在 borrow_mut 那一行之前，誰還拿著 pearls 的 borrow 沒放？",
+  "left 從函式開頭借到函式結束；改成每次要比較時才借，比較完就歸還。修好之後，再看看貝殼有沒有回到海底",
+  "鄰居互相用 Rc 拉著，strong count 永遠到不了 0：鄰居清單改存 Weak，連結時用 Rc::downgrade，用的時候 upgrade",
+]
+
+[[memory_snapshots]]
+line = 53
+note = "兩個貝殼互相成為鄰居：各被對方的 `Rc` 多拉一把，strong 都是 2"
+heap = [
+  { id = "h1", type = "RcBox<Shell>", value = "蛤蜊殼 · 珍珠 3 · 鄰居 [Rc → 海螺殼] · strong=2", state = "live" },
+  { id = "h2", type = "RcBox<Shell>", value = "海螺殼 · 珍珠 0 · 鄰居 [Rc → 蛤蜊殼] · strong=2", state = "live" },
+]
+pointers = [
+  { from = "main.clam", to = "h1", kind = "own" },
+  { from = "main.conch", to = "h2", kind = "own" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.clam", name = "clam", type = "Rc<Shell>", state = "live" },
+  { id = "main.conch", name = "conch", type = "Rc<Shell>", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 40
+note = "`left` 借走蛤蜊殼的 `pearls`（共享借用 `Ref`），而且一直借到函式結束"
+heap = [
+  { id = "h1", type = "RcBox<Shell>", value = "蛤蜊殼 · 珍珠 3（借用中：1 個 Ref） · 鄰居 [Rc → 海螺殼] · strong=2", state = "live" },
+  { id = "h2", type = "RcBox<Shell>", value = "海螺殼 · 珍珠 0 · 鄰居 [Rc → 蛤蜊殼] · strong=2", state = "live" },
+]
+pointers = [
+  { from = "main.clam", to = "h1", kind = "own" },
+  { from = "main.conch", to = "h2", kind = "own" },
+  { from = "share.shell", to = "h1", kind = "shared" },
+  { from = "share.left", to = "h1", kind = "shared" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.clam", name = "clam", type = "Rc<Shell>", state = "live" },
+  { id = "main.conch", name = "conch", type = "Rc<Shell>", state = "live" },
+]
+
+[[memory_snapshots.frames]]
+id = "share"
+fn = "share"
+vars = [
+  { id = "share.shell", name = "shell", type = "&Shell", state = "live" },
+  { id = "share.left", name = "left", type = "Ref<u32>", value = "3", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 43
+note = "`left` 還借著，又要 `borrow_mut()` 同一個 `pearls`：panic `RefCell already borrowed`"
+error = { target = "h1" }
+heap = [
+  { id = "h1", type = "RcBox<Shell>", value = "蛤蜊殼 · 珍珠 3（借用中：1 個 Ref） · 鄰居 [Rc → 海螺殼] · strong=2", state = "live" },
+  { id = "h2", type = "RcBox<Shell>", value = "海螺殼 · 珍珠 0 · 鄰居 [Rc → 蛤蜊殼] · strong=2", state = "live" },
+]
+pointers = [
+  { from = "main.clam", to = "h1", kind = "own" },
+  { from = "main.conch", to = "h2", kind = "own" },
+  { from = "share.shell", to = "h1", kind = "shared" },
+  { from = "share.left", to = "h1", kind = "shared" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.clam", name = "clam", type = "Rc<Shell>", state = "live" },
+  { id = "main.conch", name = "conch", type = "Rc<Shell>", state = "live" },
+]
+
+[[memory_snapshots.frames]]
+id = "share"
+fn = "share"
+vars = [
+  { id = "share.shell", name = "shell", type = "&Shell", state = "live" },
+  { id = "share.left", name = "left", type = "Ref<u32>", value = "3", state = "live" },
+  { id = "share.n", name = "n", type = "&Rc<Shell>", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 56
+note = "（修好 panic 之後）離開作用域：`clam`、`conch` 都 drop 了，兩個貝殼卻互相拉著，strong 停在 1；沒有任何訊息，「回到海底」一行都沒印"
+error = { target = "h1" }
+heap = [
+  { id = "h1", type = "RcBox<Shell>", value = "蛤蜊殼 · 珍珠 2 · 鄰居 [Rc → 海螺殼] · strong=1", state = "live" },
+  { id = "h2", type = "RcBox<Shell>", value = "海螺殼 · 珍珠 1 · 鄰居 [Rc → 蛤蜊殼] · strong=1", state = "live" },
+]
+pointers = []
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.clam", name = "clam", type = "Rc<Shell>", state = "dropped" },
+  { id = "main.conch", name = "conch", type = "Rc<Shell>", state = "dropped" },
+]
+
+[[memory_snapshots]]
+line = 53
+note = "（全部修正後）鄰居改存 `Weak`：只認識、不擁有，strong 維持 1、weak 變成 1"
+heap = [
+  { id = "h1", type = "RcBox<Shell>", value = "蛤蜊殼 · 珍珠 3 · 鄰居 [Weak → 海螺殼] · strong=1 weak=1", state = "live" },
+  { id = "h2", type = "RcBox<Shell>", value = "海螺殼 · 珍珠 0 · 鄰居 [Weak → 蛤蜊殼] · strong=1 weak=1", state = "live" },
+]
+pointers = [
+  { from = "main.clam", to = "h1", kind = "own" },
+  { from = "main.conch", to = "h2", kind = "own" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.clam", name = "clam", type = "Rc<Shell>", state = "live" },
+  { id = "main.conch", name = "conch", type = "Rc<Shell>", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 56
+note = "（全部修正後）離開作用域，strong 歸零，`Drop` 印出「回到海底」，兩個貝殼都釋放了"
+heap = [
+  { id = "h1", type = "RcBox<Shell>", value = "蛤蜊殼 · strong=0", state = "freed" },
+  { id = "h2", type = "RcBox<Shell>", value = "海螺殼 · strong=0", state = "freed" },
+]
+pointers = []
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.clam", name = "clam", type = "Rc<Shell>", state = "dropped" },
+  { id = "main.conch", name = "conch", type = "Rc<Shell>", state = "dropped" },
+]

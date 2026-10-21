@@ -5,7 +5,10 @@ use std::thread::{self, JoinHandle};
 fn roll_call(n: usize) -> Vec<JoinHandle<String>> {
     let mut handles = Vec::new();
     for i in 0..n {
-        handles.push(thread::spawn(|| format!("分身 {} 到！", i)));
+        handles.push(thread::spawn(|| {
+            let _lane = timeline::lane(&format!("點名 {}", i));
+            format!("分身 {} 到！", i)
+        }));
     }
     handles
 }
@@ -27,6 +30,7 @@ fn dispatch(map: Map, n: usize) -> Vec<JoinHandle<String>> {
     for i in 0..n {
         let map = Rc::clone(&map);
         handles.push(thread::spawn(move || {
+            let _lane = timeline::lane(&format!("分身 {}", i));
             let beach = &map.beaches[i % map.beaches.len()];
             format!("分身 {} 抵達{}", i, beach)
         }));

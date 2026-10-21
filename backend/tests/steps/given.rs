@@ -30,9 +30,9 @@ pub fn judge_containers() -> Vec<String> {
         .collect()
 }
 
-#[given(regex = r"^後端以 content/ 全部 33 關的關卡內容啟動$")]
+#[given(regex = r"^後端以 content/ 全部 67 關的關卡內容啟動$")]
 fn backend_started(_w: &mut ApiWorld) {
-    assert_eq!(store().levels().len(), 33, "content/ 應為 33 關");
+    assert_eq!(store().levels().len(), 67, "content/ 應為 67 關");
 }
 
 #[given(regex = r"^判題設定 max_concurrent 為 (\d+)、max_queue 為 (\d+)$")]

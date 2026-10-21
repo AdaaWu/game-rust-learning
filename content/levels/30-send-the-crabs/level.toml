@@ -3,7 +3,7 @@ chapter = 8
 order = 30
 title = "派出分身"
 kind = "fix-compile"
-visual = "none"
+visual = "timeline"
 
 story = """
 走出洞窟，海面上全是準備遷徙的螃蟹，大遷徙要開始了！
@@ -47,6 +47,12 @@ concept = """
 - `Arc<T>`：**Atomically Reference Counted**，用原子操作更新計數，可以跨執行緒共享
 - 用法和 `Rc` 一樣：`Arc::new`、`Arc::clone` 只加計數
 - 取捨：原子操作比普通加減慢一點，只在真的要跨執行緒時才用
+
+## 時間軸小幫手
+
+- 檔案最下方的 `mod timeline` 會把執行緒的開始與結束印給右邊的時間軸看，不改變程式行為
+- `let _lane = timeline::lane(...)` 替這條執行緒取名，`_lane` 被 drop（執行緒結束）時記錄結束
+- 修好後按 Run：每隻分身一條泳道，多按幾次，誰先結束不一定
 
 ## 另一條路
 

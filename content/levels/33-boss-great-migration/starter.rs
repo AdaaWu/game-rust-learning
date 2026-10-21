@@ -33,14 +33,15 @@ fn legs() -> Vec<Leg> {
 
 // 分身偵察：一座一座站上窄橋，全部站穩後回報這段路線
 fn scout(leg: Leg, bridges: Arc<Vec<Mutex<()>>>, report: mpsc::Sender<(usize, Vec<String>)>) {
+    let _lane = timeline::lane(&format!("分身 {}", leg.index));
     let mut held = Vec::new();
     for &b in &leg.bridges {
-        held.push(bridges[b].lock().unwrap());
+        held.push(timeline::lock(&bridges[b], &format!("窄橋 {}", b)).unwrap());
         println!("分身 {} 站上窄橋 {}", leg.index, b);
         thread::sleep(Duration::from_millis(30));
     }
     let moves = leg.moves.iter().map(|m| m.to_string()).collect();
-    report.send((leg.index, moves)).unwrap();
+    timeline::send(&report, "回報", (leg.index, moves)).unwrap();
     println!("分身 {} 回報完畢，讓出 {} 座窄橋", leg.index, held.len());
 }
 
@@ -54,7 +55,7 @@ fn plan(legs: Vec<Leg>) -> Vec<String> {
         thread::spawn(move || scout(leg, bridges, tx));
     }
     let mut route = Vec::new();
-    for (_, moves) in rx {
+    while let Ok((_, moves)) = timeline::recv(&rx, "回報") {
         route.extend(moves);
     }
     route

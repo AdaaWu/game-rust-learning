@@ -1,0 +1,166 @@
+id = "47-closure-trio"
+chapter = 11
+order = 47
+title = "三種鉗法"
+kind = "fix-compile"
+visual = "memory"
+
+story = """
+迷宮第二道門前，老龍蝦要我示範三種鉗法：看、捏、交出去。
+看一眼貝殼很簡單，可是要捏三下記在本子上、把珍珠交出去時，編譯器都不准。
+老龍蝦說：「你把三種鉗子都當成只能看的那一種了。」
+我得替 `repeat` 和 `deliver` 各挑一把對的鉗子。
+"""
+
+concept = """
+## closure 依「怎麼用捕捉到的東西」自動實作 Fn 家族
+
+- `Fn`：只**讀**捕捉的變數（共享借用），可以呼叫很多次，例：`|| println!("{}", shell)`
+- `FnMut`：會**改**捕捉的變數（可變借用），可以呼叫很多次，但呼叫時要 `&mut`，例：`|| log.push(..)`
+- `FnOnce`：會把捕捉的東西**交出去**（取走所有權），只能呼叫一次，例：`move || gem`
+- 編譯器看 closure 內容決定它「最多」能實作哪幾個；呼叫端的 bound 決定「要求」哪一個
+
+## 三者的包含關係
+
+- 每個 `Fn` 都是 `FnMut`，每個 `FnMut` 都是 `FnOnce`
+- 所以 bound 越寬鬆，能收的 closure 越多：`FnOnce` 收全部，`Fn` 只收只讀的
+- 代價在函式內部：拿到 `FnOnce` 只能呼叫一次；拿到 `FnMut` 要把參數宣告成 `mut f`
+
+## 怎麼挑 bound：最寬鬆且夠用
+
+- `repeat` 要呼叫 n 次 → 不能用 `FnOnce`；不需要只讀保證 → 用 `FnMut`
+- `deliver` 只呼叫一次 → 用 `FnOnce`，連會交出所有權的 closure 都收
+- `Fn` 留給真的需要「同時被很多人呼叫」的情況（例如共享給多條執行緒）
+
+## 讀懂這兩個錯誤
+
+- **E0596**：cannot borrow `log` as mutable, as it is a captured variable in a `Fn` closure → closure 想改東西，但 bound 只給 `Fn`
+- **E0507**：cannot move out of `gem`, a captured variable in an `Fn` closure → closure 想把東西交出去，但 `Fn` 可能被呼叫第二次，交出去就沒了
+- 兩個錯誤都指向 closure **裡面**，真正要改的卻是**函式簽名的 bound**
+"""
+
+hints = [
+  "錯誤指著 closure 裡面的 log 和 gem，但這兩個 closure 有寫錯嗎？還是 repeat、deliver 對它們要求太多？",
+  "repeat 要呼叫很多次、closure 會改 log；deliver 只呼叫一次、closure 會把 gem 交出去：各自需要 Fn 家族的哪一個？",
+  "repeat 的 bound 換成 FnMut，參數也要寫成 mut f；deliver 的 bound 換成 FnOnce",
+]
+
+[[memory_snapshots]]
+line = 17
+note = "看：closure 只讀 `shell`，自動實作 `Fn`，交給要求 `Fn` 的 `repeat` 沒問題"
+heap = [
+  { id = "h1", type = "String", value = "\"貝殼\"", state = "live" },
+]
+pointers = [
+  { from = "main.shell", to = "h1", kind = "own" },
+  { from = "main.look", to = "main.shell", kind = "shared" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.shell", name = "shell", type = "String", state = "live" },
+  { id = "main.look", name = "|| println!(.., shell)", type = "closure：Fn", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 20
+note = "捏：closure 要可變借用 `log` 才能 push，但 `repeat` 只收 `Fn` → E0596：cannot borrow `log` as mutable, as it is a captured variable in a `Fn` closure"
+error = { code = "E0596", target = "main.log" }
+heap = [
+  { id = "h1", type = "String", value = "\"貝殼\"", state = "live" },
+]
+pointers = [
+  { from = "main.shell", to = "h1", kind = "own" },
+  { from = "main.pinch", to = "main.log", kind = "mut" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.shell", name = "shell", type = "String", state = "live" },
+  { id = "main.log", name = "log", type = "Vec<String>", value = "[]", state = "live" },
+  { id = "main.pinch", name = "|| log.push(..)", type = "closure：需要 FnMut", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 24
+note = "交出去：`move` 把 `gem` 搬進 closure；呼叫時 closure 要把 `gem` 交出去，但 `Fn` 可能被呼叫第二次 → E0507：cannot move out of `gem`, a captured variable in an `Fn` closure"
+error = { code = "E0507", target = "hand.gem" }
+heap = [
+  { id = "h2", type = "String", value = "\"珍珠\"", state = "live" },
+]
+pointers = [
+  { from = "deliver.f", to = "hand.gem", kind = "shared" },
+  { from = "hand.gem", to = "h2", kind = "own" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.log", name = "log", type = "Vec<String>", value = "[\"捏一下\" ×3]", state = "live" },
+  { id = "main.gem", name = "gem", type = "String", state = "moved" },
+]
+
+[[memory_snapshots.frames]]
+id = "deliver"
+fn = "deliver"
+vars = [
+  { id = "deliver.f", name = "f", type = "closure（要求 Fn，只能借用）", state = "live" },
+]
+
+[[memory_snapshots.frames]]
+id = "hand"
+fn = "move || gem"
+vars = [
+  { id = "hand.gem", name = "gem（被捕捉）", type = "String", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 6
+note = "（修正後）`repeat` 改收 `FnMut` 並宣告 `mut f`，每次呼叫都可變借用 `log`，捏了第 3 下"
+heap = [
+  { id = "h1", type = "String", value = "\"貝殼\"", state = "live" },
+]
+pointers = [
+  { from = "main.shell", to = "h1", kind = "own" },
+  { from = "repeat.f", to = "main.log", kind = "mut" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.shell", name = "shell", type = "String", state = "live" },
+  { id = "main.log", name = "log", type = "Vec<String>", value = "[\"捏一下\" ×3]", state = "live" },
+]
+
+[[memory_snapshots.frames]]
+id = "repeat"
+fn = "repeat"
+vars = [
+  { id = "repeat.n", name = "n", type = "u32", value = "3", state = "live" },
+  { id = "repeat.f", name = "mut f", type = "closure：FnMut", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 25
+note = "（修正後）`deliver` 改收 `FnOnce`：closure 被呼叫一次就用掉，`gem` 的所有權交到 `got` 手上"
+heap = [
+  { id = "h2", type = "String", value = "\"珍珠\"", state = "live" },
+]
+pointers = [
+  { from = "main.got", to = "h2", kind = "own" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.log", name = "log", type = "Vec<String>", value = "[\"捏一下\" ×3]", state = "live" },
+  { id = "main.gem", name = "gem", type = "String", state = "moved" },
+  { id = "main.got", name = "got", type = "String", state = "live" },
+]

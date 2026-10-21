@@ -7,7 +7,7 @@ Feature: 送出驗收（POST /api/levels/:id/submit）
   回傳每個隱藏測試的結果，且不洩漏隱藏測試的原始碼與位置
 
   Background:
-    Given 後端以 content/ 全部 33 關的關卡內容啟動
+    Given 後端以 content/ 全部 67 關的關卡內容啟動
 
   # ---------- 全通過 ----------
 
@@ -77,15 +77,14 @@ Feature: 送出驗收（POST /api/levels/:id/submit）
     And "tests" 每一筆的 "message" 都不含 "RUST_BACKTRACE"
     And "tests" 每一筆的 "name" 都不含 "__quest_hidden_tests::"
 
-  # api.md §0.3「warning 一律保留回傳」、§4 範例（31 關以警告為線索）；decisions.md §14 ①（2 筆警告）
+  # api.md §0.3「warning 一律保留回傳」、§4 範例（31 關以警告為線索）；decisions.md §15 ⑬ 第 8 章套用 31（改 timeline 後 1 筆警告）
   @docker
   Scenario: Submit 保留使用者程式碼中的 warning 與位置
     When 對關卡 "31-shared-counter" 送出 Submit，code 為該關 starter.rs
     Then "compile.diagnostics" 依序為：
       | code               | level   | line | column | end_line | end_column | explanation_url |
-      | unused_variables   | warning | 6    | 9      | 6        | 16         | null            |
-      | unused_assignments | warning | 7    | 5      | 7        | 16         | null            |
-    And "compile.diagnostics" 第 2 筆的 "rendered" 以 "warning: value assigned to `sum` is never read" 開頭
+      | unused_assignments | warning | 8    | 5      | 8        | 16         | null            |
+    And "compile.diagnostics" 第 1 筆的 "rendered" 以 "warning: value assigned to `sum` is never read" 開頭
 
   # api.md §4「不會出現 runtime_panic：測試中的 panic 歸類為 test_failed」
   @docker

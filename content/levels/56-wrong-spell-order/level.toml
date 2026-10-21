@@ -1,0 +1,52 @@
+id = "56-wrong-spell-order"
+chapter = 12
+order = 56
+title = "搶先生效的咒語"
+kind = "debug"
+visual = "grid"
+
+story = """
+巫師的學徒幫我把 `steps!` 捲軸重抄了一份，字跡工整，一個字都沒少。
+可是我一唸到撿寶石的咒語就愣在原地，嘴裡喊著奇怪的 `MOVE PICK`。
+走路的咒語都很正常，只有撿寶石出事，問題應該出在學徒抄寫的**順序**。
+"""
+
+concept = """
+## 規則由上而下比對
+
+- `macro_rules!` 有多條規則時，編譯器**從第一條開始試**，第一條吻合的就展開，後面的不再看
+- 這和 `match` 的分支一樣：通用的分支放前面，後面更精確的分支永遠輪不到
+- 不同的是：`match` 會警告 unreachable pattern，巨集規則被遮住時**編譯器不會警告**
+
+## 為什麼 PICK 會被通用規則吃掉
+
+- `$dir:ident` 可以比對**任何**識別字，`PICK` 也是一個識別字
+- 通用規則 `($dir:ident, $n:expr)` 寫在前面，`steps!(PICK, 1)` 就被它接走，展開成 `MOVE PICK`
+- 特殊規則 `(PICK, $n:expr)` 只比對字面上的 `PICK`，必須放在通用規則**之前**
+
+## 片段轉送
+
+- `route!` 用 `$word:ident` 收下 `PICK`，再轉交給 `steps!($word, $n)`
+- `ident`、`tt`、`lifetime` 片段轉送後**還能**被字面值比對，所以 `steps!` 認得出轉送來的 `PICK`
+- `expr` 等其他片段轉送後會變成不透明的一整塊，只能被同類片段接住
+
+## Debug 心法
+
+- 先 Run：主控台印出的指令就是巨集展開後的結果，`MOVE PICK` 這種不存在的指令一眼就能看到
+- 模擬器的訊息「第 N 步：看不懂 …」直接指出是第幾道指令出事
+- 巨集出錯時，先想「這次呼叫被哪一條規則接走了？」
+"""
+
+hints = [
+  "主控台印出了 MOVE PICK：steps!(PICK, 1) 被哪一條規則接走了？",
+  "macro_rules! 從第一條規則開始試，$dir:ident 也比對得到 PICK 這個識別字",
+  "把 (PICK, $n:expr) 這條規則搬到通用規則 ($dir:ident, $n:expr) 的前面，其他都不用改",
+]
+
+[grid]
+width  = 6
+height = 4
+start  = [0, 0]
+goal   = [5, 3]
+walls  = [[1, 0], [1, 1], [3, 1], [4, 1], [3, 3], [4, 3]]
+gems   = [[2, 2], [5, 0]]

@@ -1,0 +1,189 @@
+id = "35-gem-ledger"
+chapter = 9
+order = 35
+title = "寶石帳本"
+kind = "build"
+visual = "memory"
+
+story = """
+市集的寶石商人把帳本交給我：每找到一顆寶石，就要記上一筆。
+他還要知道每座島各出了哪些寶石，月底再排一張排行榜貼在攤位前。
+商人抱怨這本帳很怪，每次翻開，寶石的順序都不一樣。
+排行榜可不能這樣，今天貼的和明天貼的要一模一樣。
+"""
+
+concept = """
+## entry：一次查找完成「沒有就建、有就改」
+
+- `ledger.entry(key)`：先找到這個鍵的位置，回傳 `Entry`（可能有值、可能沒有）
+- `.or_insert(0)`：沒有就放入 0；不管原本有沒有，都回傳那一格的 **`&mut u32`**
+- `*count += 1`：透過可變參考直接改帳本裡的值
+- `.or_default()`：放入型別的預設值（`u32` 是 0、`Vec` 是空 Vec），常用在分組：`groups.entry(isle).or_default().push(gem)`
+- 回傳的 `&mut V` 借用著整本帳本，用完之前不能再碰 `ledger`
+
+## 取捨：get 再 insert
+
+- 寫法：`let n = ledger.get(&k).copied().unwrap_or(0); ledger.insert(k, n + 1);`
+- 結果一樣，但要算兩次雜湊、找兩次位置；`entry` 只找一次
+- 值是 `Vec` 時更明顯：`get` 拿到的是 `&Vec` 不能 push，只好複製一份再放回去
+
+## HashMap 沒有順序 → 轉成 Vec 再排序
+
+- 走訪 HashMap 的順序每次執行都可能不同，排行榜要先收集成 `Vec<(String, u32)>`
+- `sort_by(|a, b| ...)`：closure 回傳 `Ordering`（`Less`、`Equal`、`Greater`）
+  - 多到少：`b.1.cmp(&a.1)`，把 `a`、`b` 對調就是反過來排
+  - 同數量再比名稱：`.then_with(|| a.0.cmp(&b.0))`，前一個比較是 `Equal` 才會比
+- 另一種寫法：`sort_by_key(|r| (Reverse(r.1), r.0.clone()))`，tuple 由左到右逐欄比較
+  - 代價：每次比較都 `clone` 名字；`sort_by` 不用
+- `String` 的大小比較是逐位元組比 UTF-8，中文字依 Unicode 碼位排，不是依筆畫或注音
+"""
+
+hints = [
+  "tally 裡，同一種寶石第二次出現時要做什麼？有沒有一個方法能同時處理「第一次」和「第 N 次」？",
+  "entry(k).or_insert(0) 回傳的是 &mut u32，對它解參考就能加一；group_by_isle 的值是 Vec，or_default() 會先放一個空 Vec",
+  "leaderboard 先把 ledger.iter() 收集成 Vec，再用 sort_by 比數量（b 對 a），數量相同時用 then_with 比名稱（a 對 b）",
+]
+
+[[memory_snapshots]]
+line = 19
+note = "六筆發現紀錄，等一下交給 `tally` 記帳"
+heap = []
+pointers = []
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.finds", name = "finds", type = "[&str; 6]", value = "[珍珠, 海星, 珍珠, 貝殼, 海星, 珍珠]", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 5
+note = "（解答思路）建立空帳本：`ledger` 在 stack 上，雜湊表的格子在 heap"
+heap = [
+  { id = "h1", type = "HashMap<String, u32>", value = "{}", state = "live" },
+]
+pointers = [
+  { from = "tally.finds", to = "main.finds", kind = "shared" },
+  { from = "tally.ledger", to = "h1", kind = "own" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.finds", name = "finds", type = "[&str; 6]", value = "[珍珠, 海星, 珍珠, 貝殼, 海星, 珍珠]", state = "live" },
+]
+
+[[memory_snapshots.frames]]
+id = "tally"
+fn = "tally"
+vars = [
+  { id = "tally.finds", name = "finds", type = "&[&str]", state = "live" },
+  { id = "tally.ledger", name = "ledger", type = "HashMap<String, u32>", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 5
+note = "（解答思路）第一顆珍珠：`entry(\"珍珠\")` 找不到，`or_insert(0)` 先放入 0，再回傳指向那一格的 `&mut u32`"
+heap = [
+  { id = "h1", type = "HashMap<String, u32>", value = "{珍珠: 0}", state = "live" },
+]
+pointers = [
+  { from = "tally.finds", to = "main.finds", kind = "shared" },
+  { from = "tally.ledger", to = "h1", kind = "own" },
+  { from = "tally.count", to = "h1", kind = "mut" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.finds", name = "finds", type = "[&str; 6]", value = "[珍珠, 海星, 珍珠, 貝殼, 海星, 珍珠]", state = "live" },
+]
+
+[[memory_snapshots.frames]]
+id = "tally"
+fn = "tally"
+vars = [
+  { id = "tally.finds", name = "finds", type = "&[&str]", state = "live" },
+  { id = "tally.ledger", name = "ledger", type = "HashMap<String, u32>", state = "live" },
+  { id = "tally.gem", name = "gem", type = "&&str", value = "珍珠", state = "live" },
+  { id = "tally.count", name = "count", type = "&mut u32", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 5
+note = "（解答思路）`*count += 1` 透過可變參考直接改帳本那一格，不必再查一次"
+heap = [
+  { id = "h1", type = "HashMap<String, u32>", value = "{珍珠: 1}", state = "live" },
+]
+pointers = [
+  { from = "tally.finds", to = "main.finds", kind = "shared" },
+  { from = "tally.ledger", to = "h1", kind = "own" },
+  { from = "tally.count", to = "h1", kind = "mut" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.finds", name = "finds", type = "[&str; 6]", value = "[珍珠, 海星, 珍珠, 貝殼, 海星, 珍珠]", state = "live" },
+]
+
+[[memory_snapshots.frames]]
+id = "tally"
+fn = "tally"
+vars = [
+  { id = "tally.finds", name = "finds", type = "&[&str]", state = "live" },
+  { id = "tally.ledger", name = "ledger", type = "HashMap<String, u32>", state = "live" },
+  { id = "tally.gem", name = "gem", type = "&&str", value = "珍珠", state = "live" },
+  { id = "tally.count", name = "count", type = "&mut u32", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 20
+note = "記完六筆，帳本搬到 `main` 的 `ledger`；heap 裡三種寶石的排列順序沒有意義，下次執行可能不同"
+heap = [
+  { id = "h1", type = "HashMap<String, u32>", value = "{海星: 2, 貝殼: 1, 珍珠: 3}", state = "live" },
+]
+pointers = [
+  { from = "main.ledger", to = "h1", kind = "own" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.finds", name = "finds", type = "[&str; 6]", value = "[珍珠, 海星, 珍珠, 貝殼, 海星, 珍珠]", state = "live" },
+  { id = "main.ledger", name = "ledger", type = "HashMap<String, u32>", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 15
+note = "（解答思路）`leaderboard` 把帳本複製成 `Vec` 再排序：數量多到少，同數量依名稱；帳本本身只被共享借用，沒有被改動"
+heap = [
+  { id = "h1", type = "HashMap<String, u32>", value = "{海星: 2, 貝殼: 1, 珍珠: 3}", state = "live" },
+  { id = "h2", type = "Vec<(String, u32)>", value = "[(珍珠, 3), (海星, 2), (貝殼, 1)]", state = "live" },
+]
+pointers = [
+  { from = "main.ledger", to = "h1", kind = "own" },
+  { from = "leaderboard.ledger", to = "main.ledger", kind = "shared" },
+  { from = "leaderboard.rows", to = "h2", kind = "own" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.finds", name = "finds", type = "[&str; 6]", value = "[珍珠, 海星, 珍珠, 貝殼, 海星, 珍珠]", state = "live" },
+  { id = "main.ledger", name = "ledger", type = "HashMap<String, u32>", state = "live" },
+]
+
+[[memory_snapshots.frames]]
+id = "leaderboard"
+fn = "leaderboard"
+vars = [
+  { id = "leaderboard.ledger", name = "ledger", type = "&HashMap<String, u32>", state = "live" },
+  { id = "leaderboard.rows", name = "rows", type = "Vec<(String, u32)>", state = "live" },
+]

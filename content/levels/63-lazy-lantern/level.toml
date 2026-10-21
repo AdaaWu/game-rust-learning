@@ -1,0 +1,52 @@
+id = "63-lazy-lantern"
+chapter = 13
+order = 63
+title = "不亮的燈籠"
+kind = "debug"
+visual = "grid"
+
+story = """
+第四道試煉是一條漆黑的洞窟，通道上每一格都掛著一盞燈籠。
+我寫了一行很漂亮的 iterator，一口氣把所有燈籠點亮，然後只走被照亮的路。
+按下 Run 之後我一步都沒動，因為眼前一片漆黑。
+程式沒有 panic，只有兩則黃色的警告，其中一則我好像在第 25 關看過。
+"""
+
+concept = """
+## 複習：iterator 是惰性的（第 25 關）
+
+- `iter_mut().map(|l| l.lit = true)` 只建立一個 `Map` 值，**沒有人消費就一次都不執行**
+- 這一行結束時 `Map` 被丟掉，closure 從來沒被呼叫
+- 編譯器有兩則警告都指向同一行：`unused Map that must be used`（附註 `iterators are lazy and do nothing unless consumed`），以及 `Iterator::map` 的 closure 回傳 `()`、建議改用 `for_each`
+
+## 這次的線索只有 warning
+
+- 沒有 panic、程式照常結束，畫面上 Ferris 原地不動
+- debug 等級 D3：主要線索在 **rustc warning** 與**畫面的異常**，不在錯誤訊息
+- 養成習慣：Run 之後先看警告列表，黃色警告常常就是邏輯錯誤
+
+## 有副作用就用 for
+
+- `for l in lanterns.iter_mut() { l.lit = true; }`：意圖最清楚
+- `lanterns.iter_mut().for_each(|l| l.lit = true)`：同樣會跑完
+- `map` 用在「轉換成新值」，結果要被 `collect`、`sum` 之類消費；拿 `map` 做副作用是誤用
+
+## 取捨
+
+- `for_each` 適合接在一長串轉接器後面；單純修改每個元素，`for` 迴圈更好讀
+- 用 `let _ = iter.map(...)` 消掉 must_use 警告不會讓它執行，只是把線索藏起來
+"""
+
+hints = [
+  "Run 之後看看警告：有一個值「must be used」，它是哪一行產生的？",
+  "map 只是排好工作，沒有東西去拉它，closure 一次都不會跑，燈籠當然沒亮",
+  "改成一個真的會走完每一盞燈籠的寫法：for 迴圈，或是能接受同一個 closure 的那個消費者方法",
+]
+
+[grid]
+width  = 6
+height = 4
+start  = [0, 0]
+goal   = [5, 3]
+walls  = [[3, 0], [4, 0], [5, 0], [0, 1], [1, 1], [3, 1], [4, 1], [5, 1], [0, 2], [1, 2], [5, 2], [0, 3], [1, 3], [2, 3], [3, 3]]
+gems   = [[2, 1], [4, 2]]

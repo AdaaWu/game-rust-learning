@@ -1,0 +1,191 @@
+id = "50-twin-isles"
+chapter = 11
+order = 50
+title = "雙胞胎島"
+kind = "debug"
+visual = "memory"
+
+story = """
+海鷗飛到迷宮上空，把看到的島名一一報給我記在海圖上。
+牠大小寫不分，同一座珊瑚島一下報 Coral、一下報 coral、一下又喊 CORAL。
+我明明寫了「島名不分大小寫就算同一座」，海圖上卻冒出一堆雙胞胎島。
+沒有任何 panic，只有越畫越多的島。
+"""
+
+concept = """
+## HashSet 怎麼判斷「已經有了」
+
+```
+① 算 hash
+  ↓
+② 找到桶
+  ↓
+③ 桶內用 == 比對
+```
+
+① 對新元素呼叫 `Hash::hash` 得到一個數字
+② 用這個數字決定要去哪個桶（bucket）找
+③ 只在**那個桶**裡用 `PartialEq::eq` 比對；有相等的就不插入
+
+- 所以 `HashSet`／`HashMap` 同時依賴 `Hash` 與 `Eq`，兩者必須講好同一套規則
+
+## Hash 與 Eq 的契約
+
+- **`a == b` 必須推得 `hash(a) == hash(b)`**
+- 反過來不必成立：不同的值 hash 相同（碰撞）沒關係，只是同一個桶要多比幾次
+- 違反契約時編譯器**不會**報錯，也不會 panic：集合只是默默地出現「相等卻重複」、`contains` 查不到
+
+## 本關的 bug
+
+- 手寫的 `PartialEq` 不分大小寫，`Coral == coral`
+- `#[derive(Hash)]` 卻是把 `name` 原樣雜湊：`Coral` 和 `coral` 的 hash 不同，被分到不同的桶，根本沒機會比對
+- 原則：**手寫了 `PartialEq`，就要一起手寫 `Hash`**，而且只能用 `eq` 有看的資訊
+
+## 修法與取捨
+
+- `impl Hash for Isle`：雜湊 `self.name.to_ascii_lowercase()`，和 `eq` 一樣不分大小寫
+- 不要在 `Isle::new` 把名字轉小寫：資料被改掉，畫面上就看不到海鷗原本報的名字
+- 把 `hash` 寫成常數（例如什麼都不雜湊）也符合契約，但所有島擠進同一個桶，查詢從 O(1) 退化成 O(n)
+"""
+
+hints = [
+  "海圖上 Coral 和 coral 各算一座。HashSet 判斷「已經有了」的時候，用到 Isle 的哪兩個 trait？",
+  "PartialEq 是手寫的、不分大小寫；Hash 是 derive 的、會分大小寫。相等的兩座島，hash 一樣嗎？",
+  "拿掉 derive 裡的 Hash，自己 impl Hash for Isle：在 hash 裡對 self.name.to_ascii_lowercase() 呼叫 .hash(state)",
+]
+
+[[memory_snapshots]]
+line = 28
+note = "記下 Coral：先算 hash，落在桶 2（桶號為示意）"
+heap = [
+  { id = "b2", type = "桶 2", value = "Isle { name: \"Coral\" }", state = "live" },
+]
+pointers = [
+  { from = "chart.isles", to = "b2", kind = "own" },
+  { from = "chart.name", to = "main.sightings", kind = "shared" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.sightings", name = "[..]", type = "[&str; 4]", value = "[Coral, Reef, coral, CORAL]", state = "live" },
+]
+
+[[memory_snapshots.frames]]
+id = "chart"
+fn = "chart"
+vars = [
+  { id = "chart.isles", name = "isles", type = "HashSet<Isle>", value = "len=1", state = "live" },
+  { id = "chart.name", name = "name", type = "&&str", value = "\"Coral\"", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 28
+note = "記下 Reef：hash 不同，落在桶 7"
+heap = [
+  { id = "b2", type = "桶 2", value = "Isle { name: \"Coral\" }", state = "live" },
+  { id = "b7", type = "桶 7", value = "Isle { name: \"Reef\" }", state = "live" },
+]
+pointers = [
+  { from = "chart.isles", to = "b2", kind = "own" },
+  { from = "chart.isles", to = "b7", kind = "own" },
+  { from = "chart.name", to = "main.sightings", kind = "shared" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.sightings", name = "[..]", type = "[&str; 4]", value = "[Coral, Reef, coral, CORAL]", state = "live" },
+]
+
+[[memory_snapshots.frames]]
+id = "chart"
+fn = "chart"
+vars = [
+  { id = "chart.isles", name = "isles", type = "HashSet<Isle>", value = "len=2", state = "live" },
+  { id = "chart.name", name = "name", type = "&&str", value = "\"Reef\"", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 28
+note = "記下 coral：`derive(Hash)` 分大小寫，hash 和 Coral 不同，落在桶 5；只在桶 5 裡比對，沒看到 Coral，於是**同一座島住進兩個桶**"
+error = { target = "b5" }
+heap = [
+  { id = "b2", type = "桶 2", value = "Isle { name: \"Coral\" }", state = "live" },
+  { id = "b5", type = "桶 5", value = "Isle { name: \"coral\" }（和 Coral 相等）", state = "live" },
+  { id = "b7", type = "桶 7", value = "Isle { name: \"Reef\" }", state = "live" },
+]
+pointers = [
+  { from = "chart.isles", to = "b2", kind = "own" },
+  { from = "chart.isles", to = "b5", kind = "own" },
+  { from = "chart.isles", to = "b7", kind = "own" },
+  { from = "chart.name", to = "main.sightings", kind = "shared" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.sightings", name = "[..]", type = "[&str; 4]", value = "[Coral, Reef, coral, CORAL]", state = "live" },
+]
+
+[[memory_snapshots.frames]]
+id = "chart"
+fn = "chart"
+vars = [
+  { id = "chart.isles", name = "isles", type = "HashSet<Isle>", value = "len=3", state = "live" },
+  { id = "chart.name", name = "name", type = "&&str", value = "\"coral\"", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 35
+note = "CORAL 又落在另一個桶 0：海圖上有 4 座島，其中 3 座其實是同一座"
+heap = [
+  { id = "b0", type = "桶 0", value = "Isle { name: \"CORAL\" }（和 Coral 相等）", state = "live" },
+  { id = "b2", type = "桶 2", value = "Isle { name: \"Coral\" }", state = "live" },
+  { id = "b5", type = "桶 5", value = "Isle { name: \"coral\" }（和 Coral 相等）", state = "live" },
+  { id = "b7", type = "桶 7", value = "Isle { name: \"Reef\" }", state = "live" },
+]
+pointers = [
+  { from = "main.isles", to = "b0", kind = "own" },
+  { from = "main.isles", to = "b2", kind = "own" },
+  { from = "main.isles", to = "b5", kind = "own" },
+  { from = "main.isles", to = "b7", kind = "own" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.isles", name = "isles", type = "HashSet<Isle>", value = "len=4", state = "live" },
+]
+
+[[memory_snapshots]]
+line = 28
+note = "（修正後）`Hash` 也先轉小寫：coral 和 Coral 落在同一個桶 2，桶內 `==` 比對相等，不再插入"
+heap = [
+  { id = "b2", type = "桶 2", value = "Isle { name: \"Coral\" }", state = "live" },
+  { id = "b7", type = "桶 7", value = "Isle { name: \"Reef\" }", state = "live" },
+]
+pointers = [
+  { from = "chart.isles", to = "b2", kind = "own" },
+  { from = "chart.isles", to = "b7", kind = "own" },
+  { from = "chart.name", to = "main.sightings", kind = "shared" },
+]
+
+[[memory_snapshots.frames]]
+id = "main"
+fn = "main"
+vars = [
+  { id = "main.sightings", name = "[..]", type = "[&str; 4]", value = "[Coral, Reef, coral, CORAL]", state = "live" },
+]
+
+[[memory_snapshots.frames]]
+id = "chart"
+fn = "chart"
+vars = [
+  { id = "chart.isles", name = "isles", type = "HashSet<Isle>", value = "len=2", state = "live" },
+  { id = "chart.name", name = "name", type = "&&str", value = "\"coral\"", state = "live" },
+]

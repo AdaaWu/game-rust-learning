@@ -1,0 +1,55 @@
+id = "49-echo-rune"
+chapter = 11
+order = 49
+title = "回音符文"
+kind = "debug"
+visual = "grid"
+
+story = """
+這段迷宮的地板刻滿符文，唸出來就是我該走的指令。
+我替符文寫了 `Display`，想讓它們自己唸出名字。
+結果第一個符文一開口，回音就停不下來，我一步都還沒走，程式就倒下了。
+主控台只留下一句 stack overflow，連出事的行號都沒有。
+"""
+
+concept = """
+## Display 是怎麼被呼叫的
+
+- `format!("{}", r)`、`println!("{}", r)`、`r.to_string()` 最後都會呼叫 `<Rune as Display>::fmt`
+- `to_string()` 來自標準庫的 `impl<T: Display> ToString for T`：它內部就是用 `{}` 格式化，也就是**再呼叫一次 `fmt`**
+
+## 無限遞迴
+
+- 在 `fmt` 裡寫 `self.to_string()` 或 `write!(f, "{}", self)`：`fmt` → `to_string` → `fmt` → …
+- 每呼叫一層就在 stack 上多一個 frame，直到 stack 用完
+- Rust 不會靜默地壞掉：執行緒偵測到 **stack overflow** 直接中止整個程式（abort）
+  - 訊息：`thread 'main' has overflowed its stack`、`fatal runtime error: stack overflow`
+  - abort 不是 panic：沒有 panic 訊息、沒有行號，`catch_unwind` 也接不住
+- rustc 看不出這種「繞過 trait 的遞迴」，所以**沒有任何警告**
+
+## 正確寫法
+
+- `Display` 要印**組成自己的資料**（欄位、對照表），不是印自己
+- `f.write_str(self.carving())` 或 `write!(f, "{}", self.carving())`
+- 想沿用 Debug 的內容，用 `{:?}` 明確呼叫 `Debug`，不要繞回 `Display`
+
+## Debug 心法
+
+- 沒有行號時，先問：「哪個函式會無止境地呼叫自己？」
+- stack overflow 幾乎都是遞迴少了終止條件，或兩個函式互相呼叫
+- Submit 時：程式在某個測試中途被中止，之後的測試都沒有結果（not_run），從第一個沒結果的測試找起
+"""
+
+hints = [
+  "stack overflow 代表某個函式一直呼叫自己。印出符文時，會經過哪個函式？",
+  "to_string() 是怎麼做出字串的？它其實也會用 {} 格式化，也就是再呼叫一次 fmt",
+  "fmt 裡不要再格式化 self，改印符文上刻的字：Rune 已經有 carving() 可以用",
+]
+
+[grid]
+width  = 6
+height = 4
+start  = [0, 0]
+goal   = [5, 3]
+walls  = [[3, 0], [0, 1], [1, 1], [3, 1], [4, 1], [0, 2], [3, 2], [5, 2], [0, 3]]
+gems   = [[2, 0], [1, 2], [4, 2]]
