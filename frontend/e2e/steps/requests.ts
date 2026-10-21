@@ -164,7 +164,7 @@ Step(/^mock API 的 GET "\/api\/levels\/([^"]+)" 回 404，error\.code 為 "(\w+
   mock.detailOverrides.set(id, errorReply(404, code))
 })
 
-Step(/^mock API 的 (Run|Submit) (?:改為)?回 (\d{3})，(.+)$/, async ({ mock }, kind: string, status: string, rest: string) => {
+Step(/^mock API 的 (Run|Submit) (?:改為)?回 (\d{3})，(.+)$/, async ({ mock, world }, kind: string, status: string, rest: string) => {
   const code = /error\.code 為 "(\w+)"/.exec(rest)?.[1]
   const retry = /標頭 "Retry-After" 為 "([^"]*)"/.exec(rest)?.[1]
   const text = /body 為純文字 "([^"]*)"/.exec(rest)?.[1]
@@ -173,6 +173,8 @@ Step(/^mock API 的 (Run|Submit) (?:改為)?回 (\d{3})，(.+)$/, async ({ mock 
   else {
     if (!code) throw new Error(`看不懂的失敗回應：${rest}`)
     reply = errorReply(Number(status), code, retry !== undefined ? { 'Retry-After': retry } : undefined)
+    // 忙碌倒數改由「經過 N 秒」推進時鐘
+    if (code === 'JUDGE_BUSY') world.pauseClockOnRequest = true
   }
   setReplies(mock, kind, [reply])
 })

@@ -72,23 +72,6 @@ function setRun(mock: MockApi, reply: Json, delayMs = 0) {
   mock.runDelayMs = delayMs
 }
 
-// 暫停頁面時鐘，自動播放停在回應後的第 1 步，不受主機快慢影響（同 ci/setup 的 pauseClock）
-async function pauseClock(world: World) {
-  await world.installClock()
-  // pauseAt 不能回到過去，取頁面現在時間再往後一點，主機太慢時重取
-  for (let i = 0; ; i++) {
-    const now = await world.page.evaluate(() => Date.now())
-    try {
-      await world.page.clock.pauseAt(now + 200)
-      return
-    } catch (e) {
-      if (i >= 4) throw e
-    }
-  }
-}
-
-const pauseBeforeRun = new WeakSet<World>()
-
 // ---------- 畫面元素 ----------
 
 function tl(world: World): Locator {
@@ -210,11 +193,6 @@ Step('mock API 回傳測試用 8 關 fixture 的關卡列表與詳細資料，�
   await setPlatform(world, 'Windows')
   // 自動播放靠快轉時鐘等待
   await world.installClock()
-  const clickRun = world.clickRun.bind(world)
-  world.clickRun = async () => {
-    if (pauseBeforeRun.delete(world)) await pauseClock(world)
-    await clickRun()
-  }
 })
 
 Step(/^玩家進度中測試用 8 關 fixture 與 30-send-the-crabs、33-boss-great-migration 都已拿到 ★1$/, async ({ world }) => {
@@ -245,8 +223,8 @@ Step(
     if (stderrName) body.execution.stderr = APPENDIX.stderr.get(stderrName)
     if (status === 'timeout') expect(body.execution.timed_out).toBe(true)
     setRun(mock, body, delay ? Number(delay) * 1000 : 0)
-    // 延遲回應的 Run：回來後要比對第 1 步，先停住時鐘
-    if (delay) pauseBeforeRun.add(world)
+    // 延遲回應的 Run：點 Run 前停住時鐘，自動播放停在第 1 步
+    if (delay) world.pauseClockOnRequest = true
   },
 )
 

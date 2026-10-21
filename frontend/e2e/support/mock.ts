@@ -65,6 +65,18 @@ export class MockApi {
   submitDelayMs = 0
   counts = { run: 0, submit: 0, list: 0, health: 0 }
   inflight = 0
+  // 延遲回應等到測試開始等請求完成才放行，請求中的斷言不受主機快慢影響
+  private holds: (() => void)[] = []
+  private released = false
+
+  hold() {
+    this.released = false
+  }
+
+  release() {
+    this.released = true
+    for (const resolve of this.holds.splice(0)) resolve()
+  }
 
   useFixtureGrid() {
     this.list = {
@@ -118,7 +130,10 @@ export class MockApi {
     if (reply.hang) return
     this.inflight++
     try {
-      if (delay > 0) await new Promise((r) => setTimeout(r, delay))
+      if (delay > 0) {
+        const held = this.released ? Promise.resolve() : new Promise<void>((r) => this.holds.push(r))
+        await Promise.all([new Promise((r) => setTimeout(r, delay)), held])
+      }
       if (reply.abort) {
         await route.abort('failed').catch(() => {})
         return

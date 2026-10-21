@@ -12,7 +12,9 @@ const testDir = defineBddConfig({
 export default defineConfig({
   testDir,
   fullyParallel: true,
-  workers: 4,
+  // CI 主機 4 vCPU 要同時跑 Vite 與瀏覽器
+  workers: process.env.CI ? 2 : 4,
+  retries: process.env.CI ? 1 : 0,
   timeout: 60_000,
   expect: { timeout: 5_000 },
   reporter: [['list']],

@@ -12,7 +12,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "typecheck": "vue-tsc -b",
-    "e2e": "bddgen && playwright test"
+    "e2e": "bddgen && playwright test",
+    "e2e:ci": "bddgen --tags \"not @docker\" && playwright test --reporter=list,html"
   },
   "dependencies": {
     "dompurify": "^3.4.17",

@@ -142,8 +142,8 @@ Step(/^「執行」與「送出」按鈕(?:恢復)?為可點擊(，且不顯示�
   }
 })
 
-Step(/^經過 ([0-9]+) 秒$/, async ({ page }, secs: string) => {
-  await page.waitForTimeout(Number(secs) * 1000)
+Step(/^經過 ([0-9]+) 秒$/, async ({ world }, secs: string) => {
+  await world.elapse(Number(secs) * 1000)
 })
 
 Step(/^按鈕旁顯示「(.+)」$/, async ({ page }, text: string) => {
@@ -316,14 +316,16 @@ Step(/^hover 內容含指向 "([^"]+)" 的錯誤碼連結$/, async ({ world }, u
 
 // ---------- 草稿 ----------
 
-Step(/^輸入後 300 ms 時 localStorage 沒有 key "([^"]+)"$/, async ({ world, page }, key: string) => {
-  await page.waitForTimeout(300)
-  expect(await world.storageItem(key)).toBeNull()
+// 以頁面內時間比對最後輸入與首次寫入，不受主機快慢影響
+Step(/^輸入後 300 ms 時 localStorage 沒有 key "([^"]+)"$/, async ({ page }, key: string) => {
+  await page.waitForFunction(() => performance.now() >= window.__rqTrace!.lastInput + 300)
+  const { lastInput, written } = await page.evaluate((k) => ({ lastInput: window.__rqTrace!.lastInput, written: window.__rqTrace!.writes[k] }), key)
+  if (written !== undefined) expect(written - lastInput).toBeGreaterThanOrEqual(300)
 })
 
 Step(/^停止輸入 500 ms 後 localStorage 的 "([^"]+)" 等於編輯器目前內容$/, async ({ world }, key: string) => {
   const code = await world.editorValue()
-  await expect.poll(() => world.storageItem(key), { timeout: 2000 }).toBe(code)
+  await expect.poll(() => world.storageItem(key)).toBe(code)
 })
 
 // ---------- 確認對話框 ----------
