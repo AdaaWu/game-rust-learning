@@ -1,0 +1,25 @@
+{
+  "id": "02-mut-matters",
+  "chapter": 1,
+  "order": 2,
+  "title": "黏住的腳",
+  "kind": "fix-compile",
+  "visual": "grid",
+  "story": "Ferris 看到前方有一顆閃亮的寶石，再過去就是終點旗子。\n牠寫好了一段「往右走四步、撿寶石、再走一步」的程式，卻一步也動不了。\n海鷗在旁邊笑：「你的變數被宣告成不能改的啦！」",
+  "concept": "## Rust 的變數預設不可變\n\n- `let x = 0;` 之後不能再改 `x`\n- 要改就寫 `let mut x = 0;`\n- 這是刻意的設計：看到 `mut` 就知道「這個值會變」，沒有 `mut` 就能放心它不會被偷改\n\n## 讀懂這兩個錯誤\n\n- **E0384** cannot assign twice to immutable variable：對不可變變數第二次賦值\n- **E0596** cannot borrow as mutable：`push` 需要修改 `Vec`，但它不是 `mut`\n- 編譯器的 `help:` 那一行通常直接告訴你要加在哪裡\n\n```rust\nlet mut count = 0;\ncount += 1; // OK\n```",
+  "hints": [
+    "看編譯錯誤裡的變數名稱，有哪兩個變數後來被修改了？",
+    "steps 會 += 1，cmds 會 push，兩個都需要能被修改",
+    "把 let steps 改成 let mut steps，把 let cmds 改成 let mut cmds"
+  ],
+  "grid": {
+    "width": 6,
+    "height": 3,
+    "start": [0, 1],
+    "goal": [5, 1],
+    "walls": [[2, 0], [3, 0], [1, 2], [3, 2]],
+    "gems": [[4, 1]],
+    "doors": []
+  },
+  "memory_snapshots": null
+}

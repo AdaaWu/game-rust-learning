@@ -1,0 +1,25 @@
+{
+  "name": "rust-quest-poc-web",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 5180 --strictPort",
+    "build": "vue-tsc --noEmit && vite build",
+    "shots": "node scripts/screenshots.mjs"
+  },
+  "dependencies": {
+    "markdown-it": "^15.0.3",
+    "monaco-editor": "^0.57.0",
+    "vue": "^3.5.44"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.1",
+    "@types/markdown-it": "^14.1.2",
+    "@vitejs/plugin-vue": "^6.0.10",
+    "@vue/tsconfig": "^0.9.1",
+    "typescript": "~6.0.3",
+    "vite": "^8.3.4",
+    "vue-tsc": "^3.3.13"
+  }
+}
