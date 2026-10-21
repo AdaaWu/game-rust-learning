@@ -1,6 +1,6 @@
 # Rust Quest 規格決策紀錄
 
-> 狀態：v1.3（定稿；§13 補保留清單、新增 §15 v1.3 收尾定案）
+> 狀態：v1.6（最新至 §15 ⑱ 第二季最終驗收後補充；⑬「新增名詞」補登 v1.6 實作項目；v1.5 新增 §15 ⑮ 第二季規格驗收修正；v1.4 新增 §15 ⑬ 第二季並行時間軸 timeline）
 > 來源：`docs/PLAN.md`「已定決策」與規格交叉核對結果
 > 格式：每條一行結論＋一行理由；細節見括號內的規格章節
 
@@ -509,3 +509,267 @@
   - 理由：這是另一種合法的死鎖避免手法，難度高於標準解，寫得出來代表已理解死鎖成因
 - 以 `unsafe_code` 診斷碼編譯失敗的反例視為有效（反例第二行標記 `// expect: compile_error unsafe_code`）
   - 理由：`-F unsafe_code` 正是擋下這類取巧的機制，屬 ⑪「反例必須能編譯」的唯一例外
+
+### ⑬ 第二季：並行時間軸可視化（timeline，架構師＋UX）
+
+**事件來源**
+
+- 新增 `visual = "timeline"`，事件比照 grid 走 Run 的 stdout，一行一事件、以 `@tl|` 開頭（architecture.md §3.11）
+  - 理由：Run 流程、輸出上限、timeout 保留輸出全部沿用，判題器零改動
+- 事件由 starter 檔尾的時間軸小幫手 `mod timeline` 印出，玩家呼叫 `timeline::lock`／`send`／`recv`／`lane`／`note`
+  - 理由：包住真正的 std 呼叫才印得出「真的拿到鎖、真的解鎖」的時機，玩家手動補印會畫錯
+- 小幫手原始碼只有一份 `content/shared/timeline.rs`，loader 啟動時接到 starter 與 solution 尾端
+  - 理由：比照 §12 ①「單一來源」；每關貼一份會在 6 個以上的檔案漂移
+- 小幫手放在玩家看得到、改得到的檔尾，不由判題器偷偷併入
+  - 理由：併入要讓 Run 也做行號對應與隱藏區段過濾，且玩家看不到 `timeline` 從哪來
+- 不用自製 `TracedMutex` 型別取代 `std::sync::Mutex`
+  - 理由：玩家要學的是 std API；小幫手只是 `lock(&m, 名稱)` 包一層，回傳仍是 `LockResult`
+- x 軸用事件序號，不印時間戳；畫面呈現「這一次」的真實順序，不追求可重現
+  - 理由：交錯不固定是並行的本質；毫秒受容器排程干擾，對學習沒有幫助
+- 事件格式 `@tl|<kind>|<line>|<thread>|<target>`，十種 kind
+  - 理由：題目要求的七類動作，加上 `recv_wait`（指揮官卡在等訊息要看得見）與 `recv_closed`（所有 Sender drop 後 channel 關閉是 32、33 的核心觀念）
+- `line` 用 `#[track_caller]` 取呼叫行號
+  - 理由：「死鎖時誰卡在哪」要落到編輯器的那一行；小幫手在檔尾，行號與編輯器一致
+- 印出時機固定：`lock_wait`、`send` 在動作前印，`lock_got`、`recv` 在動作後印，`lock_free` 在解鎖前印；`send` 與真正送出包在同一把內部鎖裡
+  - 理由：讓行序成為合法的先後關係，同一把鎖的持有區段不重疊、訊息可依先進先出配對、箭頭不會往回指
+- timeout、截斷時以已輸出的事件呈現，卡住的泳道最後一個事件就是它停的位置
+  - 理由：Rust stdout 行緩衝，`docker kill` 前已印的整行都會回來（已用 rustc 1.99.1 實測死鎖後被 kill）
+- 小幫手以 `cfg!(test)` 在 Submit 時完全靜音
+  - 理由：libtest 會把失敗測試的 stdout 灌進 `TestResult.message`；Submit 本來就不驅動可視化
+- 不防玩家印假事件
+  - 理由：判題只看 Submit 的隱藏測試，Run 輸出不影響通關與星等；Submit 時假事件被 libtest 捕捉，進不了任何畫面
+- 小幫手只做 std 呼叫的一對一包裝，不提供組合動作、不改 Send／Sync、不含 unsafe
+  - 理由：不能替玩家做「固定鎖順序」「drop(tx)」等該關要教的事
+
+**level.toml 與 API**
+
+- `level.toml` 只新增 enum 值 `timeline`，不新增設定表
+  - 理由：鎖與 channel 的顯示名稱已寫在小幫手呼叫的參數裡，再設一份會與程式碼對不上
+- loader：timeline 關卡不可有 `[grid]`、`memory_snapshots`；`timeline.rs` 缺檔即啟動失敗
+  - 理由：比照 grid、memory 的互斥規則與 `grid_sim.rs` 的 fail fast
+- `LevelDetail` 不新增欄位，`grid`、`memory_snapshots` 為 `null`；只有 `starter` 內容多了小幫手
+  - 理由：前端只需要 `visual` 判斷渲染哪個元件
+- `TimelineEvent` 是前端解析 stdout 的內部型別，不進 API 契約
+  - 理由：後端不解析事件，與 grid 指令相同
+
+**TimelineView**
+
+- 一關只有一種 visual，不做分頁切換多種可視化
+  - 理由：可視化區桌機只有約 390px，兩個元件搶注意力；多 visual 要改 `visual` 型別、loader、VisualPanel 與每個元件的播放狀態
+  - 重新評估的觸發：第 9–13 章出現「同時需要地圖與時間軸才能理解」的關卡
+- 播放沿用 `PlaybackBar`、`pending`、Submit 還原規則；`line-change` 沿用 MemoryView 的單行高亮
+  - 理由：不新增播放元件與編輯器 API
+- 死鎖以「鎖的等待關係出現循環」判定，每一步都判、出現即標紅
+  - 理由：依印出時機保證，前綴出現循環就是真死鎖；`recv_wait` 看不到誰握著 Sender，只標「等訊息」
+- 時間軸只陳述事實，不給修法
+  - 理由：修法屬於提示，揭露才計入 ★2；畫面若直接說「依編號上鎖」等於免費提示
+- 主控台在 timeline 關卡隱藏 `@tl|` 行並顯示隱藏行數
+  - 理由：事件行會淹沒玩家自己的 `println!`，33 的除錯心法靠主控台最後幾行
+- 新增 4 個 token `--tl-lock-1`～`--tl-lock-4`，訊息與死鎖沿用 `--info`、`--danger`
+  - 理由：鎖需要彼此可分的圖形色；其他語意已有 token
+- 事件上限 1,000 個，泳道不設上限
+  - 理由：與 grid 步數上限同值；判題 `pids-limit 64` 已限制執行緒數
+
+**第 8 章套用**
+
+- 30 改 `timeline`（fix-compile）
+  - 套用：`roll_call`、`dispatch` 的 closure 開頭加 `let _lane = timeline::lane(&format!("點名 {}", i))`／`("分身 {}", i)`
+  - 修好後看到每隻分身一條泳道、誰先結束不一定；starter 編不過時顯示「程式還沒編譯成功」
+  - 限制：小幫手呼叫在 closure 內也用到 `i`，starter 仍只有 E0373 與 E0277 兩個錯（已實測），內容測試釘住
+- 31 改 `timeline`（debug）
+  - 套用：`add_haul` 改為 `let mut sum = *timeline::lock(total, "計數器").unwrap();`，下一行 `timeline::note(&format!("讀到 {}", sum));`，再 `sum += gems;`；`gather` 每隻螃蟹 `lane`，結尾讀總數也用 `timeline::lock`
+  - 效果：starter 三隻螃蟹都「讀到 0」，且標註出現在「放開 計數器」之後；solution 依序讀到 0、3、8 且在鎖內（已實測）
+  - 限制：`note` 必須放在 `sum += gems` 之前，`unused_assignments` 警告才保留（hint 1 的線索）；hints 2、3 的程式碼改寫為小幫手語法
+- 32 維持 `grid`
+  - 理由：build 關的產出就是路線，Ferris 地圖是本章唯一的地圖獎勵；channel 箭頭在 33 的時間軸再看到
+  - 若改用 timeline 需要 `recv_timeout` 包裝與一種新事件（逾時），屬需求外
+- 33 改 `timeline`（目前是 `grid`），移除 `[grid]`
+  - 套用：`scout` 開頭 `let _lane = timeline::lane(&format!("分身 {}", leg.index))`，上鎖改 `timeline::lock(&bridges[b], &format!("窄橋 {}", b)).unwrap()`，回報改 `timeline::send(&report, "回報", ...)`；`plan` 的收訊改 `while let Ok((_, moves)) = timeline::recv(&rx, "回報")`
+  - 效果：starter 時間軸直接畫出「分身 0 等窄橋 1（被分身 1 佔著）」的循環並標紅；修好鎖順序但沒 drop(tx) 時，`main` 停在「等 回報 的訊息，其他執行緒都已結束」
+  - 測試：`great_migration_reaches_the_tablet` 改為比對寫死的完整路線（`level_grid()` 只在 grid 關卡產生）；其餘測試與取巧反例不變
+  - 內容同步：concept「Debug 心法」改為先看時間軸與主控台；hints 的「for 迴圈」改為 `while let` 的說法；story 的地圖描述由課程設計師決定是否保留
+  - 已知取捨：失去 Boss 關的 Ferris 地圖演出
+
+**新增名詞（範圍紀律）**
+
+- `visual = "timeline"`：前端據此渲染 TimelineView
+- `content/shared/timeline.rs`：小幫手單一來源
+- `mod timeline` 與 `lane`、`lock`、`send`、`recv`、`note`：題目要求的動作各對應一個包裝；`lane` 用來替泳道取名與記錄結束
+- `Lane`、`Held` 型別：靠 Drop 印出 `end`、`lock_free`，時機才與真正結束、解鎖一致
+- 事件 kind 十種（`start`、`end`、`lock_wait`、`lock_got`、`lock_free`、`send`、`recv_wait`、`recv`、`recv_closed`、`note`）：理由見上方事件格式
+- loader 組合 starter／solution 規則：小幫手單一來源的落地方式
+- TimelineView、`parseTimelineEvents`、`deriveTimeline`、`TimelineEvent`、`ParsedTimeline`、`TimelineState`、`LaneState`：元件與可單元測試的純函式
+- token `--tl-lock-1`～`--tl-lock-4`：鎖的圖形色
+- 事件上限 1,000：避免分頁卡頓，與 grid 同值
+- 主控台「已隱藏 n 行時間軸事件」：隱藏事件行時的告知
+- 內容測試：solution 事件序列無循環等待且全部收尾、33 starter 出現循環、30／31 starter 錯誤與警告不變、Submit message 不含 `@tl|`
+
+v1.5 補列（驗收員列出的異動清單外項目，主控判定全部保留，屬 TimelineView 必要互動與健壯性）
+
+- 事件標記點擊跳步與鍵盤走訪（ux.md §11.7、§11.9）：死鎖時要能逐一回看各事件，Tab／Enter 是可及性底線
+- 泳道標籤按鈕發 `line-change`（ux.md §11.8）：死鎖時逐一點各隻分身看牠停在哪一行，是 33 的除錯動線
+- 「每次執行的先後順序可能不同」小字（ux.md §11.1、§11.3）：避免玩家把單次交錯誤認為固定行為
+- 窄寬度版面（ux.md §11.3）：手機「結果」分頁容器 < 360px，不處理會出現頁面橫向捲軸
+- 自動橫向捲動（ux.md §11.3、§11.9）：事件多時目前步會跑出可見範圍，播放失去意義
+- 同泳道重疊疊層（ux.md §11.3、§11.5）：握一把鎖又等另一把是死鎖的標準畫面，不疊層會互相蓋住
+- `ParsedTimeline.malformed` 與警示（ux.md §11.4、§11.6）：玩家改壞小幫手或印假事件時要告知，不能默默少畫
+- 小幫手內部鎖 `SENDING`（architecture.md §3.11）：保證 `send` 行序與真正送出一致，訊息箭頭才不會往回指
+- `clean()` 欄位清洗（architecture.md §3.11）：名稱含 `|` 或換行會讓欄位錯位、一行多事件
+- `ThreadId(n)` 備援命名（architecture.md §3.11）：未命名的 spawn 執行緒沒有 std 名稱，仍需一個泳道名
+
+v1.6 補登（第二季最終驗收列出的異動清單外實作項目，逐項補登理由）
+
+- ConsolePanel prop `hideTimelineEvents`：主控台隱藏 `@tl|` 行由呼叫端依 `visual` 開關，非 timeline 關卡照常顯示
+- `TimelineState.sentence`：目前步的事件句（第 N 步 · 第 L 行），與 ux.md §11.6 步驟說明對應
+- `TimelineState.conclusion`：整體結論句獨立成欄位，元件不重算、單元測試可直接釘值
+- `MAX_TIMELINE_EVENTS`：事件上限 1,000 的具名常數，解析器與「超過上限」提示共用同一值
+- `backend/tests/common/timeline.rs`：內容測試共用的事件解析與循環判定輔助（約 260 行），只在測試碼、不進正式程式碼（architecture.md §6.2）
+- LevelView 的 `timelineKey`：每次 Run 成功遞增並作為 TimelineView 的 key，相同程式碼再 Run 也從第 1 步重播（見 ⑰）
+- `attach_timeline(src, helper)`：loader 與內容測試共用的小幫手接合函式，避免兩份組法漂移（見 ⑰）
+- `.gitignore` 新增 `.claude/`：排除 worktree 隔離派工產生的暫存目錄，避免誤提交
+
+**不做（需求外）**
+
+- `[timeline]` 設定表（鎖與 channel 顯示名稱、顏色）：名稱已在程式碼裡
+- 時間戳、毫秒時間軸：見上方理由
+- 訊息內容標籤（箭頭上顯示送了什麼）：需要格式化任意 `T`，`T` 不一定實作 `Debug`
+- 事件格式版本號：只有一份小幫手，格式改了內容測試會紅
+- `recv_timeout`、`try_lock`、`try_recv`、`sync_channel`、`RwLock`、`Condvar`、`thread::scope` 包裝：目前沒有關卡用到，第 9–13 章需要時再加
+- 一關多種 visual、Submit 驅動時間軸、編輯器同時高亮多行、點行號反查事件、泳道摺疊、事件原文切換鈕
+- 第一季草稿遷移：草稿沒有小幫手時顯示零事件提示，玩家按「重設」取回
+
+**第二季課程追加裁定（主控轉課程設計師 v1.4 提問）**
+
+- 49 關 stack overflow abort（exit 134）：Run 為 `runtime_panic`、Submit 為 `test_failed`，沿用現行 `determine_status`，不加新規則
+  - 理由：134 不是 OOM 的 137，落在「exit 非 0」分支；Submit 已有「exit 非 0 且無 failed → test_failed、缺結果者 not_run」補充規則；已用 rustc 1.99.1 實測 exit 134 與 libtest 輸出
+- 前端補「測試程式中途當掉」卡片：`test_failed` 且沒有 `failed` 測試時，在測試結果分頁顯示 `execution.stderr`（ux.md §3.3）
+  - 理由：原本 test_failed 畫面不顯示 stderr，玩家看不到 `has overflowed its stack` 這個唯一線索
+- libtest 依測試名稱字母序執行，會 abort 的測試要靠命名排到最後（architecture.md §3.6）
+  - 理由：課程寫的「放 tests.rs 最後」無效，宣告順序只影響回傳列表的排序
+- 67 關只用 `grid`，不加 timeline 第二視圖
+  - 理由：維持「一關只有一種 visual」；67 的四個 bug 中只有 ① 與鎖有關，③④ 的線索（路線每次不同、走出地圖）都在地圖上；死鎖在 33 已用時間軸教過，67 是複習，Run timeout＋主控台＋看門狗訊息足夠
+  - 若使用者仍要 67 有時間軸：最小做法是 67 改 `timeline`、放棄地圖（③④ 線索改由主控台路線文字呈現），而不是開放多 visual
+- MemorySnapshot 不擴充：HashSet 的桶與 closure 的捕捉都能用現有 `HeapBlock`、`StackVar`、`pointers` 表達，慣例寫在 ux.md §5.1
+  - 理由：桶用「一桶一區塊＋集合變數多條 own 指標」攤平；closure 是一個變數加 shared／mut／own 指標；唯一表達不了的是 heap → heap 指標，目前沒有關卡需要
+
+**原待使用者決定（已由 ⑭ 定案）**
+
+- 33 改 timeline，接受失去 Boss 的 Ferris 地圖演出；不開放 timeline 關卡附帶 `[grid]`
+- 30 改 timeline
+- 32 維持 grid，不加 `recv_timeout` 包裝與逾時事件
+
+**影響**
+
+- architecture.md §0、§1.1、§1.2、§1.4、§2.2、§3.11（新）、§6.2、§7.3、§7.5
+- api.md §0.3 `LevelVisual`、§2 timeline 說明與範例、§3 Run 說明、§6 TS 型別
+- ux.md §0、§2.1、§3.2、§3.3、§7.1、§7.3、§8.2 token、§9、§10、§11（新）
+- curriculum.md（課程設計師）：visual 列舉加 `timeline`；30、31、33 的 visual 與內容摘要；67 移除「可選 timeline 第二視圖」；49「Display 測試放最後」改為「測試名稱字母序排最後」
+- architecture.md §3.6、api.md §0.3 `JudgeStatus`、ux.md §3.3 test_failed、§5.1：abort 判定與 MemorySnapshot 表達慣例
+- PLAN.md（主控）：已定決策補 timeline 摘要；S2-2 `ui_timeline.feature`；S2-3 loader、TimelineView；S2-4 第 8 章三關更新
+
+### ⑭ 第二季課程（主控）
+
+- 第二季擴充為第 9–13 章 34 關（總數 67），第 13 章「除錯試煉場」全為 debug，難度逐關遞增
+  - 理由：使用者要求關卡可以多、後段以 debug 為主、難度漸進
+- 運算子多載 Add 併入 46 關、37 關改為執行期版本的「邊走訪邊刪除」：接受
+  - 理由：關聯型別統一教學；原設計是編譯錯誤，放 concept 說明即可
+- 「撰寫測試」與「模組可見性」在 67 關再出現一次（補檢查函式、拆兩個 mod）
+  - 理由：每個觀念至少出現三次的原則
+- 已知殘留接受：40 全改 pub、42 差分測試、34 iter().find 查 HashMap、35 get 後 insert、50 Hash 常數、67 串行版
+  - 理由：要擋需過度限制合法寫法，且玩家仍練到該關觀念
+- 49 關 stack overflow：Submit 判 test_failed、未完成測試 not_run；Run 判 runtime_panic
+  - 理由：沿用「exit 非 0 且無 failed 測試」規則，stderr 保留 overflow 訊息當線索
+- 第 8 章 timeline 套用：30、31、33 改用 timeline（33 放棄 Ferris 地圖），32 維持 grid；67 只用 grid
+  - 理由：死鎖與執行緒交錯最適合泳道呈現，一關一種 visual 避免可視化區互搶注意力
+- 49 關 stack overflow 相關測試以 `zz_` 開頭命名排在最後
+  - 理由：libtest 依測試名稱字母序執行，宣告順序無效
+
+### ⑮ 第二季規格 v1.5 驗收修正（主控）
+
+- timeline 結論只看有 `start` 的泳道：沒有 `start` 的泳道（例如 `main`）不參與「全部執行緒都結束了」「還有 n 條沒做完」「其他執行緒都已結束」，也不畫 runtime_panic 的未結束尾端（ux.md §11.6、architecture.md §6.2）
+  - 理由：`main` 不呼叫 `lane`，永遠不會有 `end`；照舊規則 33 solution 會被說成「還有 1 條沒做完」，與內容測試規則矛盾
+- 死鎖「循環的第一條泳道」＝循環中依泳道排序（`main` 置頂、其餘依首次出現）最前者；結論與編輯器高亮都從它開始（ux.md §11.5、§11.6、§11.8）
+  - 理由：原文「第一條」沒有定義，前端單元測試無法釘死；沿用既有排序規則，不新增概念
+- 取巧反例在 timeline 關卡由內容測試比照 loader 接上 `content/shared/timeline.rs`，反例檔不自帶小幫手（architecture.md §6.2）
+  - 理由：維持小幫手單一來源，反例與玩家實際送出的程式碼組法相同
+- 泳道名稱即識別：同一關內名稱須唯一、`lane` 須在該執行緒第一個事件前呼叫；`thread` 欄位存修剪後的值（ux.md §11.4、architecture.md §3.11）
+  - 理由：前端以名稱分泳道，重名或晚呼叫會把兩條執行緒畫在一起或拆成兩條
+- 驗收員列出的異動清單外項目全部保留，補列於 ⑬「新增名詞」v1.5 補列
+  - 理由：都是 TimelineView 必要互動、可及性或事件格式健壯性，拿掉會讓畫面錯誤或不可用
+- 章節開場關可低於前一章 Boss、但不低於 6.0（curriculum.md §6.6）維持
+  - 理由：章節開場要能重新起步，6.0 下限已防止難度回落到第一季前段
+- curriculum v1.5 同步 ⑬⑭：visual 列舉加 `timeline`、第 8 章 30／31／33 改 timeline、§4.8 第 31 關全文改用小幫手、49 判題已定、67 只用 grid 並補檢查函式與兩個 mod、難度不寫進 `level.toml`
+  - 理由：關卡作者以 curriculum 為準落檔，規格不同步會直接造成內容錯誤
+- 54 關巨集 matcher 不預先寫好，本體與 matcher 皆由玩家完成
+  - 理由：預寫 `$(,)?` 等於提前給出本關要教的結尾逗號寫法
+- 內容測試加檢查：timeline 關 solution 的具名泳道名稱不重複
+  - 理由：名稱即識別，重名會讓區段與死鎖判定畫錯，自律不可靠
+
+### ⑯ timeline 細節裁定（主控，BDD 回報後）
+
+- 自己等自己的結論句寫「（被自己佔著）」
+  - 理由：比「被 分身 0 佔著」好讀，與事件句一致
+- deadlocked 只標目前仍未結束的等待區段
+  - 理由：已結束的舊等待與死鎖無關，標紅會誤導
+- 「還有 n 條執行緒在等」只計具名泳道；main 等訊息另以「main 等訊息」描述
+  - 理由：與 ⑮「只看有 start 的泳道」一致
+- 「沒做完」名稱依泳道排序列出；「已隱藏 n 行」計所有 `@tl|` 開頭行（含格式錯誤）
+  - 理由：排序可預期、隱藏行數與主控台實際隱藏一致
+- 圖例「▬ 持有／┄ 等待／➝ 訊息」與刻度（1、5、10…）以 ux §11.3 示意圖為準
+- 49 關 Run overflow 情境（panic 卡片、無 marker）保留
+  - 理由：ux §3.3 與 architecture §3.6 已有依據
+- timeout 結論句型：只有 main 在等時為「時間到：main 等訊息」；具名泳道與 main 同時在等時為「時間到：還有 n 條執行緒在等；main 等訊息」
+  - 理由：具名泳道計數與 main 的狀態分開描述，句型可預期
+- PlaybackBar 加 `disabled` prop；TimelineView 尚未執行時整列停用
+  - 理由：只鎖進度條不足以表達「尚未執行」，最小擴充
+- 時間軸「程式碼已修改」提示由 LevelView 在可視化區顯示，TimelineView 維持四個 props
+  - 理由：避免可視化元件各自重複相同提示邏輯
+- 結論附加句以「；」連接；零事件提示中的 `timeline::` 以 `<code>` 呈現；超過事件上限後的行不再計入 malformed
+  - 理由：句型可預期、與 errorHints 程式碼呈現一致、上限後不再解析
+
+### ⑰ 第二季落檔後補充（主控）
+
+- 51 關「count_beats 自行重算、不經 closure」列為已知殘留
+  - 理由：要擋需改公開簽名，會削弱本關 closure 捕捉的教學設計
+- 41 關「空計畫回傳 &str 轉 Box<dyn Error>」保留；45 關突變測試加 parse_step 閘門保留
+  - 理由：前者示範 `&str` 轉 trait object、後者讓 D5「修好一個才浮現下一個」在 Submit 成立
+- 後端新增 pub fn `attach_timeline(src, helper)`，loader 與內容測試共用
+  - 理由：反例須「比照 loader 組法」，共用同一函式避免兩份組法漂移
+- 前端第二棒自行補定的 timeline 細節（無 start 泳道等鎖寫「main 等鎖」、非 ok／timeout 狀態保留原結論但照常標紅、「…」只在 ok 與 runtime_panic 畫、泳道 aria-label 狀態用語等）全部接受
+  - 理由：皆為規格空白處的合理延伸，不改變行為主線
+- 「目前步數直線」與「手機可視化區比例」排入後續版本；capped 元件測試補 testTimeout
+  - 理由：前兩者屬版面調整，非本季必要；後者避免 CI 高負載誤報
+- 相同程式碼再 Run 時，時間軸也要從第 1 步重播：LevelView 以每次 Run 結果為 key 重新掛載 TimelineView，不新增 prop
+  - 理由：沿用 GridWorld 的做法，維持 §11.2 四個 props，同時分辨「請求失敗還原」與「新 Run 重播」
+- 未播放的事件標記以 0.4 透明度顯示且可點擊，Tab 只走訪已播放者
+  - 理由：§11.7 要求點任一事件標記可跳步
+
+### ⑱ 第二季最終驗收後補充（主控）
+
+- 38 關測試改比對欄位值，不用玩家型別的 `==`；全面掃描以玩家可改寫的 `==`／`assert_eq!` 判斷正確性的關卡並修正
+  - 理由：玩家可手寫永遠回 true 的 PartialEq 繞過
+- 59 關補直接檢查 Display 輸出的斷言
+  - 理由：只在巨集內 trim 可繞過 Display 的 bug
+- 54 關補以 f64（只有 PartialOrd）呼叫 max_of! 的測試，使 `into_iter().max()` 寫法因型別無法編譯
+  - 理由：強制遞迴寫法；屬「只靠型別擋下」，不寫反例
+- 已知殘留新增：45、67 以自己的實作做差分比對（同 42 類）、52 保留固有方法只改回傳值、39 改用 BTreeMap
+  - 理由：前者同 42 已接受的類型；後兩者仍需理解該關觀念才寫得出
+- 提示最後一則不得列出全部修法或整段程式碼；story 與實際執行結果一致；starter 註解不得預先透露 bug
+  - 理由：維持 debug 關需要自己定位問題的學習價值
+- ⑬ v1.6 補登的新增名詞全部裁定保留；63 關體感偏易維持 8.0、不調換 62／63 順序（列為已知落差）
+  - 理由：補登項目皆有行為依據；調換順序需改編號與連帶斷言，成本高於落差影響
+- 54 關以 `$(..),+` 展開成陣列再 `reduce` 的寫法列為已知殘留
+  - 理由：仍須寫出重複 matcher 與 transcriber，觀念有練到；測試無法從行為分辨遞迴與陣列寫法
+- 隱藏測試與共用模擬器一律以完整路徑呼叫 std 巨集（`::std::assert!`、`::std::assert_eq!`、`::std::assert_ne!`、`::std::matches!`、`::std::panic!` 等）
+  - 理由：玩家在程式中自訂同名 `macro_rules!` 會延伸到隱藏測試模組，讓所有斷言失效；完整路徑不受文字作用域巨集影響，也不限制第 12 章玩家定義巨集
+- 61 關手寫 `if raw > 255 { Err }` 的範圍檢查屬合法解
+  - 理由：行為正確且理解了截斷問題，不是繞過觀念
+- level_grid 產生器改輸出 `::std::vec![...]`；grid_sim 開頭明確 use std 的 Option／Result／String／Vec 與 Some／None／Ok／Err
+  - 理由：玩家覆寫 `vec!` 可清空地圖；明確 use 讓玩家合法自訂同名型別時不致誤判編譯失敗
+- `#[test]` 可被 `use X as test` 遮蔽列為已知殘留
+  - 理由：rustc 1.99 穩定版無法以此構成取巧（屬性巨集需 unstable 或編譯失敗），修法需改 header 行數連動多處
+- curriculum §1.4–1.6 同步「std 巨集完整路徑」規則：接受
+- grid_sim 內 slice／集合方法改用完整語法呼叫（例如 `<[_]>::contains(&grid.walls, &next)`），並加 01 關「自訂 trait 讓 contains 永遠 false」反例
+  - 理由：此手法可讓所有 grid 關穿牆，影響面最大且修法成本低
+- 「刻意以自訂 trait 或同名型別遮蔽 std 方法／型別（String、Vec、str 方法）」列為已知殘留類別
+  - 理由：需要遠超該關的 Rust 知識才寫得出，屬惡意繞過而非觀念捷徑；全面改寫隱藏測試的成本與維護負擔過高，本機學習用途可接受

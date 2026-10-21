@@ -1,6 +1,6 @@
 # Rust Quest
 
-Rust Quest 是一個 Rust 學習闖關網頁：前端 Vue 3、後端 Axum，共 33 關、8 章。玩家在瀏覽器寫 Rust，後端用 Docker 沙箱編譯與執行判題。
+Rust Quest 是一個依章節逐關進行的 Rust 學習闖關網頁：前端 Vue 3、後端 Axum。玩家在瀏覽器寫 Rust，後端用 Docker 沙箱編譯與執行判題。
 
 > **僅供本機學習使用。** 判題會執行使用者送出的程式碼，對外部署前必須改用 rootless Docker 或 gVisor 等更強的隔離。
 

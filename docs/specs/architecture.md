@@ -1,6 +1,6 @@
 # Rust Quest 系統架構規格（SDD）
 
-> 狀態：v1.3（定稿；收尾第二輪驗收次要問題與工程師疑義，決策見 decisions.md §13–§15）
+> 狀態：v1.5（§3.11 泳道名稱規則、§6.2 內容測試只看有 start 的泳道與 timeline 取巧反例組法；v1.4 新增並行時間軸 timeline，§3.11；決策見 decisions.md §15 ⑬）
 > 範圍：系統元件、後端模組、Judge（判題器）、安全、效能、測試策略、前端架構
 > 相關文件：`docs/specs/api.md`（API 契約）、`docs/specs/ux.md`（前端行為）、`docs/specs/curriculum.md`（關卡內容）、`docs/specs/decisions.md`（決策與理由）、`features/*.feature`（BDD 情境）
 
@@ -17,6 +17,8 @@
 - **Diagnostic（診斷）**：rustc 輸出的錯誤或警告，解析成 `{code, message, line, column, end_line, end_column, level, explanation_url, rendered}`
 - **Semaphore（號誌）**：限制同時進行的工作數量的計數器；拿到 permit（許可）才能做事，做完歸還
 - **熱路徑（hot path）**：被呼叫最頻繁、對延遲最敏感的程式路徑
+- **時間軸事件（timeline event）**：玩家程式在 Run 時以 `@tl|` 開頭印到 stdout 的一行，描述執行緒、鎖、channel 的一次動作（§3.11）
+- **時間軸小幫手（timeline helper）**：`content/shared/timeline.rs` 裡的 `mod timeline`，包住 `Mutex::lock`、`Sender::send`、`Receiver::recv` 並印出事件；loader 把它接在 timeline 關卡的 starter 尾端（§2.2、§3.11）
 
 ---
 
@@ -37,6 +39,7 @@
 - **content/chapters.toml**：章節編號與名稱（§2.2），經 `GET /api/levels` 的 `chapters` 給前端
 - **content/levels/**：關卡資料（`level.toml`、`starter.rs`、`tests.rs`、`solution.rs`）
 - **content/shared/grid_sim.rs**：grid 關卡共用模擬器，Submit 時併入隱藏測試模組（內容見 curriculum.md §1.5）
+- **content/shared/timeline.rs**：時間軸小幫手原始碼，loader 啟動時接到 timeline 關卡的 starter 與 solution 尾端（§3.11）
 - **Docker daemon（host 上）**：實際建立與隔離容器
 
 ### 1.2 啟動流程
@@ -54,7 +57,7 @@
 ```
 
 ① 讀取判題參數（timeout、上限、併發數）；MVP 用程式內常數（見 §3.9）
-② 讀入 `content/chapters.toml` 與 `content/shared/grid_sim.rs`，掃描 `content/levels/*/`，解析 `level.toml`、讀入三個 `.rs` 檔、依 §2.2 驗證；任一項失敗則**啟動失敗**（fail fast），錯誤訊息含檔案路徑與原因
+② 讀入 `content/chapters.toml`、`content/shared/grid_sim.rs` 與 `content/shared/timeline.rs`，掃描 `content/levels/*/`，解析 `level.toml`、讀入三個 `.rs` 檔、依 §2.2 驗證；任一項失敗則**啟動失敗**（fail fast），錯誤訊息含檔案路徑與原因
 ③ 執行 `docker version` 與 `docker image inspect rust-quest-runner:<tag>`；失敗**不中止啟動**，標記 Judge 為 `unavailable`，`/api/health` 回 `degraded`
 ④ `docker ps -aq --filter label=rust-quest.judge=1` 找出上次異常結束留下的判題容器，`docker rm -f` 清掉
 ⑤ 預設綁定 `127.0.0.1:3000`；前端開發時由 Vite proxy 轉送 `/api`
@@ -113,7 +116,7 @@
 ⑧ 編譯成功才執行；Run 執行 `main`、Submit 執行測試 binary；host 端另計時、截斷輸出
 ⑨ 無論成功、失敗、超時、client 斷線都執行（RAII guard）
 ⑩ 診斷解析器、測試輸出解析器轉成 JSON
-⑪ Monaco 標記診斷；grid 關卡把 stdout 指令餵給 GridWorld；Submit 通過時前端計算星等並寫進度
+⑪ Monaco 標記診斷；grid 關卡把 stdout 指令餵給 GridWorld、timeline 關卡把 `@tl|` 事件餵給 TimelineView；Submit 通過時前端計算星等並寫進度
 
 ---
 
@@ -186,7 +189,23 @@ runner/
     - `pointers` 的 `from`（變數 `id`）、`to`（變數或 heap `id`）與 `error.target` 必須指向同一步存在的 `id`
     - `error.code` 有值時須符合 `^E\d{4}$`
     - `line` ≥ 1；是否超過檔案行數由內容測試檢查（§6.2 ④），loader 不比對
-  - `content/shared/grid_sim.rs` 不存在時啟動失敗
+  - **timeline**：`visual = "timeline"` 時不可有 `[grid]` 與 `memory_snapshots`；沒有專屬設定表（鎖與 channel 的顯示名稱寫在小幫手呼叫的參數裡，§3.11）
+    - 啟動時組出對外的 `starter` 與內容測試用的 `solution`，存進內部 `Level`：
+      ```
+      ① starter.rs 原文
+        ↓
+      ② 補結尾換行
+        ↓
+      ③ 一個空行
+        ↓
+      ④ timeline.rs 全文
+      ```
+      ① 原樣放在最前面，玩家程式碼行號不受影響（小幫手在檔尾）
+      ② 不以 `"\n"` 結尾時補一個；已有換行不再補
+      ③ 接一個 `"\n"`，讓小幫手與玩家程式碼之間隔一行
+      ④ `content/shared/timeline.rs` 全文原樣接上；`solution.rs` 用同一規則組出
+    - 判題器不知道 timeline：Run／Submit 收到的程式碼本來就含小幫手，合併檔規則（§3.7）不變
+  - `content/shared/grid_sim.rs`、`content/shared/timeline.rs` 不存在時啟動失敗
   - 啟動時從 `tests.rs` 依宣告順序抽出測試函式名稱清單（`#[test]` 下一個 `fn` 的名稱），供 `tests` 排序、`--exact` 過濾與 `not_run` 標示（見 §3.6）
   - 內部 `Level` 含 `solution`、`tests`；對外 `LevelSummary`、`LevelDetail` 是**不同型別**，不含這兩欄，避免序列化時誤洩
 - **judge**
@@ -458,6 +477,18 @@ Run 與 Submit 共用**同一組 `status` 列舉**，前端只需一套分支。
   - Submit：`ok`、`compile_error`、`test_failed`、`timeout`、`memory_limit`、`output_limit`
 - `memory_limit`、`output_limit` 定案為獨立狀態，不併入 `runtime_panic`：前端提示文案與常見原因不同（ux.md §3.3）
 
+**程式 abort（例：stack overflow，v1.4 確認）**
+
+- 無限遞迴（例：49 關 `Display` 裡 `write!(f, "{}", self)`）會讓 Rust 印出 `thread '<名稱>' has overflowed its stack`、`fatal runtime error: stack overflow, aborting` 後以 SIGABRT 結束，`docker exec` 回 **exit 134**
+  - 已用 rustc 1.99.1 實測：Run 與 `--test --test-threads=1` 都是 exit 134；rustc 不給任何警告
+- 不需要新規則，現行 ①–⑧ 已涵蓋
+  - 134 不是 137，不會判成 `memory_limit`；不是 host kill，`exit_code` 照實回 `134`（不轉 `null`）
+  - Run：⑦ exit 非 0 → `runtime_panic`；stderr 含 overflow 訊息，但沒有 `main.rs:行:欄`，所以不畫 panic marker
+  - Submit：⑦ 補充規則「exit 非 0 且沒有任何 `failed` 測試」→ `test_failed`；已印出 `test X ... ok` 的照實為 `passed`，當下那個測試只印出 `test X ... ` 沒有結果、之後的都沒輪到，依 `test_output.rs` 規則一律 `not_run`
+  - `execution.stderr` 保留 overflow 訊息（stderr 不被 libtest 捕捉，abort 訊息直接寫到程序 stderr），前端顯示規則見 ux.md §3.3 test_failed
+- 關卡作者注意：libtest 依**測試名稱字母序**執行，不是 `tests.rs` 宣告順序；要讓會 abort 的測試最後跑，必須讓它的名稱排在最後（例：`zz_` 開頭），否則排在它後面的測試都會變成 `not_run`
+- 回歸測試（① 單元）：`determine_status` 以 Submit、exit 134、tests 為「passed, passed, not_run」→ `test_failed`、`exit_code = 134`；Run、exit 134 → `runtime_panic`
+
 **libtest 文字輸出解析（`test_output.rs`）**
 
 - 不使用 `--format json`：在 stable 需 `-Z unstable-options`，不可靠
@@ -530,16 +561,19 @@ Run 與 Submit 共用**同一組 `status` 列舉**，前端只需一套分支。
 ② 使用者程式碼不以 `"\n"` 結尾時補一個 `"\n"`；已有換行則不再補，結尾空行原樣保留（避免黏到下一行，也不改變使用者行數）
 ③ 依序五行：`#[cfg(test)]`、`#[allow(dead_code)]`、`#[allow(unused_imports)]`、`mod __quest_hidden_tests {`、`    use super::*;`
   - `#[allow(unused_imports)]`：測試沒用到 `super::*` 的項目時不冒出隱藏區段的警告
-④ 僅 `visual = "grid"`：`content/shared/grid_sim.rs` 全文 + `"\n"`，再接啟動時依 `[grid]` 產生的 `level_grid()` + `"\n"`（§2.2；省略的 `walls`、`gems`、`doors` 產生 `vec![]`）
+④ 僅 `visual = "grid"`：`content/shared/grid_sim.rs` 全文 + `"\n"`，再接啟動時依 `[grid]` 產生的 `level_grid()` + `"\n"`（§2.2；省略的 `walls`、`gems`、`doors` 產生 `::std::vec![]`）
   - 產生格式為單行，欄位順序與 `grid_sim.rs` 的 `Grid` 一致，座標轉成 tuple：
     ```rust
-    fn level_grid() -> Grid { Grid { width: 5, height: 2, start: (0, 0), goal: (4, 1), walls: vec![(2, 0), (2, 1)], gems: vec![], doors: vec![] } }
+    fn level_grid() -> Grid { Grid { width: 5, height: 2, start: (0, 0), goal: (4, 1), walls: ::std::vec![(2, 0), (2, 1)], gems: ::std::vec![], doors: ::std::vec![] } }
     ```
+  - `grid_sim.rs` 內方法一律用完整語法呼叫（例如 `<[_]>::contains`），玩家自訂 trait 的同名方法無法遮蔽（curriculum.md §1.5）
 ⑤ 該關 `tests.rs` 全文（只含模組內容，不自帶 `mod`，見 curriculum.md §1.4）；不以 `"\n"` 結尾時補一個 `"\n"`，避免最後一行黏到結尾的 `}`
 ⑥ `}` + `"\n"`
 
 - 模組名 `__quest_hidden_tests` 避免與玩家自己的 `mod tests` 衝突
 - 模組內的模擬器與測試輔助項目會遮蔽 `use super::*` 引入的同名項目，玩家同名定義不會造成編譯錯誤
+- 隱藏測試、共用模擬器與產生的 `level_grid()` 以完整路徑呼叫 std 巨集（`::std::assert_eq!`、`::std::vec!` 等）：玩家自訂的同名 `macro_rules!` 會延伸到合併在後面的隱藏模組，完整路徑不受影響
+- 共用模擬器開頭明確 `use` std 的 `Option`、`Result`、`String`、`Vec` 與四個變體，蓋過 `use super::*` 帶進來的玩家同名定義（例如 `type Result<T>`）
 
 **行號對應（Submit 模式）**
 
@@ -588,6 +622,251 @@ struct JudgeConfig {
 - 結果快取 10 秒，避免 health 被頻繁呼叫時狂打 docker CLI
 - 判題時 `docker run` 失敗或超過 10 秒（daemon 掛掉、資源不足）→ 回 `503 JUDGE_UNAVAILABLE`，並讓快取失效
 - `/api/health` 只回 `status` 與 `judge.available`、`judge.reason`（api.md §5）
+
+### 3.11 並行時間軸（timeline）事件協定
+
+timeline 關卡比照 grid：玩家程式在 Run 時把事件印到 stdout，前端解析後畫成泳道圖；後端與判題器都不解析事件。
+
+**事件來源：比照 grid 走 stdout，由檔尾的小幫手印出**
+
+```
+① 玩家程式呼叫小幫手
+  ↓
+② 小幫手印事件並做真正的動作
+  ↓
+③ Run 回傳 stdout
+  ↓
+④ 前端解析並畫時間軸
+```
+
+① `timeline::lock(&m, "窄橋 0")`、`timeline::send(&tx, "回報", v)` 等，用法與 std 相同，只多一個名字參數
+② 每個事件一行 `println!`；小幫手只包 std 呼叫，不改變程式行為
+③ Run 流程與輸出上限完全不變（§1.4、§3.5）
+④ 解析與畫法見 ux.md §11
+
+- 評估過的其他來源（不採用理由見 decisions.md §15 ⑬）
+  - 判題器偷偷併入隱藏模組：Run 也要做行號對應與隱藏區段過濾，玩家看不到 `timeline` 從哪來
+  - 自製 `TracedMutex` 型別：玩家不再寫 `std::sync::Mutex`，學到的 API 對不上業界
+  - 關卡作者手寫事件腳本（比照 memory_snapshots）：只能演示，不能反映玩家這次真的怎麼跑
+
+**真實執行順序 vs. 可重現性**
+
+- 取捨：時間軸呈現「這一次 Run 真實發生的順序」，不追求可重現
+  - 執行緒交錯每次不同是並行的本質，畫面要讓玩家看見這件事，而不是藏起來
+  - 要可重現只能自己排程（模擬器或固定種子），那就不是 `std::thread` 了
+- 時間軸 x 軸是**事件序號**（stdout 行序），不是毫秒；不印時間戳
+  - 理由：序號已足夠表達「誰先誰後、誰在等」；毫秒受容器排程干擾，數字對學習沒有幫助
+- 教學需要固定現象時，由關卡程式自己製造（例：33 starter 每座橋鎖完 `sleep(30ms)`，讓兩隻分身幾乎必定各握一座橋）
+
+**事件格式**
+
+```
+@tl|<kind>|<line>|<thread>|<target>
+```
+
+- 一行一個事件，從第 1 欄開始，以 `@tl|` 開頭；`@` 讓它永遠不會被 grid 的指令正規式當成指令嘗試（ux.md §4.3）
+- `kind`：十種，見下方清單
+- `line`：呼叫小幫手那一行的行號（`#[track_caller]` 取得，與編輯器行號相同）；`lock_free`、`end` 由 Drop 觸發，沒有呼叫行，留空
+- `thread`：泳道名稱；`timeline::lane("分身 0")` 設定，沒設定時用 std 執行緒名（主執行緒為 `main`），再沒有就用 `ThreadId(n)`
+  - 泳道名稱即識別：前端把 `thread` 相同（去除頭尾空白後）的事件畫在同一條泳道，`TimelineEvent.thread` 存修剪後的值（ux.md §11.4）
+  - 關卡程式的約束（前端與內容測試不另檢查）：同一關內各執行緒的 `lane` 名稱須唯一；`lane` 須在該執行緒第一個事件之前呼叫，否則先前的事件會落在 std 執行緒名的另一條泳道
+  - 沒呼叫 `lane` 的執行緒（例如 `main`）沒有 `start`／`end`，不參與「全部執行緒都結束了」的判斷（ux.md §11.6）
+- `target`：鎖名、channel 名或標註文字；`start`、`end` 留空
+- 小幫手把名稱與文字裡的 `|`、換行換成空白，保證一行一事件、欄位不錯位
+
+- 十種 `kind`（何時印 → target）
+  - `start`：`timeline::lane(name)` 被呼叫 → 空
+  - `end`：`lane` 回傳的值被 drop（執行緒結束）→ 空
+  - `lock_wait`：呼叫 `mutex.lock()` **之前** → 鎖名
+  - `lock_got`：`mutex.lock()` 回傳**之後** → 鎖名
+  - `lock_free`：guard 被 drop、真正解鎖**之前** → 鎖名
+  - `send`：`tx.send(v)` **之前**，與真正送出在同一段臨界區內 → channel 名
+  - `recv_wait`：呼叫 `rx.recv()` **之前** → channel 名
+  - `recv`：`rx.recv()` 回 `Ok` **之後** → channel 名
+  - `recv_closed`：`rx.recv()` 回 `Err`（所有 Sender 都 drop 了）之後 → channel 名
+  - `note`：`timeline::note(text)` → 標註文字
+
+範例（33 starter，Run 逾時前已印出的事件；行號為示意）：
+
+```
+@tl|recv_wait|78|main|回報
+@tl|start|42|分身 0|
+@tl|start|42|分身 1|
+@tl|lock_wait|45|分身 0|窄橋 0
+@tl|lock_got|45|分身 0|窄橋 0
+@tl|lock_wait|45|分身 1|窄橋 1
+@tl|lock_got|45|分身 1|窄橋 1
+@tl|lock_wait|45|分身 0|窄橋 1
+@tl|lock_wait|45|分身 1|窄橋 0
+```
+
+最後兩行之後兩隻分身都沒有新事件：分身 0 握窄橋 0 等窄橋 1、分身 1 握窄橋 1 等窄橋 0，構成循環等待（死鎖判定見 ux.md §11.5）。
+
+**順序保證（印的時機就是為了這個）**
+
+- 同一把鎖：`lock_got` 在取得後才印、`lock_free` 在解鎖前就印，所以行序上同一把鎖的持有區段不會重疊
+- 同一個 channel：`send` 與真正送出包在小幫手內部的一把鎖裡（只包這兩步，從不在等待時持有），`recv` 在收到後才印
+  - 因此每個 channel 第 k 個 `send` 必定對應第 k 個 `recv`（mpsc 先進先出、只有一個接收端），前端用這條規則畫訊息箭頭
+  - `send` 永遠排在對應的 `recv` 之前，箭頭不會往回指
+- 只支援無上限的 `mpsc::channel`：`send` 不會阻塞，內部那把鎖不會造成新的等待；`sync_channel` 不包（§3.11 不做清單）
+- 卡住的執行緒不會再印任何事件：某條泳道最後一個事件是 `lock_wait`／`recv_wait`，代表它停在那裡
+
+**timeout、截斷、panic 時已輸出的事件**
+
+- Rust 的 stdout 一律行緩衝（`LineWriter`）：每個事件印完整行就送出，`docker kill` 前已印的事件都會在 `execution.stdout` 裡（§3.5 保留已讀內容）
+  - 已用 rustc 1.99.1 實測：死鎖程式被 kill 後，stdout 完整保留到最後一個 `lock_wait`
+- `stdout_truncated = true`：最後一行可能不完整，前端解析前丟棄最後一行（與 grid 相同）
+- panic：`lane` 與 guard 的 Drop 在 unwinding 時照常執行，會印出 `lock_free`、`end`
+- 主執行緒先結束：其他執行緒被一起收掉，它們的泳道沒有 `end`；前端照實顯示「沒做完」（ux.md §11.6）
+
+**Submit 不印事件**
+
+- 小幫手的 `emit` 以 `cfg!(test)` 判斷：Submit 以 `rustc --test` 編譯，整個 crate 的 `cfg(test)` 為真，小幫手只做 std 動作、不印任何東西
+  - 理由：libtest 會把失敗測試的 stdout 放進 `---- name stdout ----` 區段，事件行會灌進 `TestResult.message`；Submit 本來就不驅動可視化（與 grid 相同）
+- `send` 在測試模式下也不拿內部那把鎖，隱藏測試的執行時序與沒有小幫手時相同
+
+**作弊：不需要防**
+
+- 玩家可以自己 `println!("@tl|...")` 印假事件，或刪掉小幫手呼叫；只影響自己看到的畫面
+- 不防的理由
+  - 通關只看 Submit 的隱藏測試，Run 的任何輸出都不影響判題與星等（§3.6、ux.md §6.1）
+  - Submit 時小幫手不印事件，假事件只能靠玩家自己的 `println!`，而 libtest 會捕捉它，進不了任何可視化
+- 小幫手對判題的影響只有一條：它必須是 std 呼叫的一對一包裝，不能給出測試要求的能力（見下方「小幫手設計約束」）
+
+**小幫手設計約束（防止洩漏解答或降低教學要求）**
+
+- 一個小幫手只包一個 std 動作：`lock`、`send`、`recv` 各包一次呼叫，回傳型別與 std 相同（`LockResult`、`Result<(), SendError<T>>`、`Result<T, RecvError>`），玩家照樣要寫 `.unwrap()`
+- 不提供組合動作：沒有「依序上多把鎖」「全部收完」「自動 drop Sender」之類的函式
+- 不改變型別性質：不包 `Rc`、不實作 `Send`／`Sync`、不用 `unsafe`（判題本來就 `-F unsafe_code`）
+- guard 釋放時機與 std 相同：`Held` 被 drop 時才解鎖，暫存值、作用域結尾、`drop()` 的行為都與 `MutexGuard` 一致
+- 不提供 `recv_timeout`、`try_lock`、`try_recv`：目前套用的關卡用不到，等關卡需要時再加（需求外，§3.11 不做清單）
+
+**參考實作（`content/shared/timeline.rs`）**
+
+已以 rustc 1.99.1 `--edition 2024 -A dead_code -F unsafe_code` 編譯（一般與 `--test` 兩種）無 warning；確切內容以內容測試釘死為準。
+
+```rust
+// ===== 時間軸小幫手：把事件印給右邊的時間軸看，不改變程式行為（不用改） =====
+mod timeline {
+    use std::cell::RefCell;
+    use std::ops::{Deref, DerefMut};
+    use std::panic::Location;
+    use std::sync::mpsc::{Receiver, RecvError, SendError, Sender};
+    use std::sync::{LockResult, Mutex, MutexGuard, PoisonError};
+
+    thread_local! {
+        static LANE: RefCell<Option<String>> = const { RefCell::new(None) };
+    }
+    // 印出 send 與真正送出包在一起，channel 的先後才對得上
+    static SENDING: Mutex<()> = Mutex::new(());
+
+    fn clean(s: &str) -> String {
+        s.replace(['|', '\n', '\r'], " ")
+    }
+
+    fn emit(kind: &str, line: Option<u32>, target: &str) {
+        if cfg!(test) {
+            return;
+        }
+        let who = LANE.with(|l| l.borrow().clone()).unwrap_or_else(|| {
+            let t = std::thread::current();
+            t.name().map(clean).unwrap_or_else(|| format!("{:?}", t.id()))
+        });
+        let line = line.map(|n| n.to_string()).unwrap_or_default();
+        println!("@tl|{}|{}|{}|{}", kind, line, who, clean(target));
+    }
+
+    // 替這條執行緒取名；回傳值被 drop 時記錄執行緒結束
+    pub struct Lane;
+
+    #[track_caller]
+    pub fn lane(name: &str) -> Lane {
+        LANE.with(|l| *l.borrow_mut() = Some(clean(name)));
+        emit("start", Some(Location::caller().line()), "");
+        Lane
+    }
+
+    impl Drop for Lane {
+        fn drop(&mut self) {
+            emit("end", None, "");
+        }
+    }
+
+    // 與 mutex.lock() 用法相同，多一個鎖的名字；回傳值被 drop 時解鎖
+    pub struct Held<'a, T> {
+        guard: MutexGuard<'a, T>,
+        name: String,
+    }
+
+    #[track_caller]
+    pub fn lock<'a, T>(mutex: &'a Mutex<T>, name: &str) -> LockResult<Held<'a, T>> {
+        let line = Some(Location::caller().line());
+        emit("lock_wait", line, name);
+        let result = match mutex.lock() {
+            Ok(guard) => Ok(Held { guard, name: name.to_string() }),
+            Err(p) => Err(PoisonError::new(Held { guard: p.into_inner(), name: name.to_string() })),
+        };
+        emit("lock_got", line, name);
+        result
+    }
+
+    impl<T> Deref for Held<'_, T> {
+        type Target = T;
+        fn deref(&self) -> &T {
+            &self.guard
+        }
+    }
+
+    impl<T> DerefMut for Held<'_, T> {
+        fn deref_mut(&mut self) -> &mut T {
+            &mut self.guard
+        }
+    }
+
+    impl<T> Drop for Held<'_, T> {
+        fn drop(&mut self) {
+            emit("lock_free", None, &self.name);
+        }
+    }
+
+    // 與 tx.send(value) 用法相同，多一個 channel 的名字
+    #[track_caller]
+    pub fn send<T>(tx: &Sender<T>, name: &str, value: T) -> Result<(), SendError<T>> {
+        if cfg!(test) {
+            return tx.send(value);
+        }
+        let _order = SENDING.lock().unwrap_or_else(PoisonError::into_inner);
+        emit("send", Some(Location::caller().line()), name);
+        tx.send(value)
+    }
+
+    // 與 rx.recv() 用法相同，多一個 channel 的名字
+    #[track_caller]
+    pub fn recv<T>(rx: &Receiver<T>, name: &str) -> Result<T, RecvError> {
+        let line = Some(Location::caller().line());
+        emit("recv_wait", line, name);
+        let result = rx.recv();
+        emit(if result.is_ok() { "recv" } else { "recv_closed" }, line, name);
+        result
+    }
+
+    // 在時間軸上插一面小旗子
+    #[track_caller]
+    pub fn note(text: &str) {
+        emit("note", Some(Location::caller().line()), text);
+    }
+}
+```
+
+- `Held` 的 `Drop` 本體先印 `lock_free`，之後欄位 `guard` 才被 drop（真正解鎖），順序保證由 Rust 的 drop 順序提供
+- 常見誤用：`let _ = timeline::lane(...)` 會立刻 drop、馬上印 `end`；關卡範例一律寫 `let _lane = ...`
+- 玩家可以改小幫手：改壞只影響自己的 Run 畫面；「重設」取回原版
+
+**不做**
+
+- 時間戳、事件版本號、訊息內容標籤：見 decisions.md §15 ⑬
+- `recv_timeout`、`try_lock`、`try_recv`、`sync_channel`、`RwLock`、`Condvar`、`thread::scope` 的包裝：目前沒有關卡用到
+- 判題器或後端解析事件：比照 grid，後端不解析 stdout
 
 ---
 
@@ -733,12 +1012,13 @@ struct JudgeConfig {
   - `diagnostics.rs`：以 rustc 真實輸出存成 fixture（`tests/fixtures/rustc/*.jsonl`），測 E0382、語法錯誤（無 code）、lint 警告保留、連結器非 JSON 行、`aborting due to` 與 `failure-note` 過濾、primary span 對應 `end_line`／`end_column`、`rendered` 原文、Submit 行號落在隱藏區段時四個位置欄位與 `rendered` 為 `null`、span 跨進隱藏區段時截斷、隱藏區段的 warning 被過濾而 error 保留、50 筆上限
   - `test_output.rs`：全部通過、部分失敗含 panic 訊息（含 thread id 的前綴行被去除）、被 kill 時剩餘測試為 `not_run`、編譯失敗時全部 `not_run`、`__quest_hidden_tests::` 前綴去除、順序依 `tests.rs` 宣告順序
   - 合併檔組成：grid 關卡含共用模擬器與產生的 `level_grid()`、非 grid 關卡兩者都不含、隱藏模組開頭五行、`user_line_count` 計算、使用者程式碼最後一行無換行時補一個換行、已有換行時不多補
-  - `level_grid()` 產生：§3.7 ④ 的單行格式、欄位值與 `[grid]` 相同、省略的陣列產生 `vec![]`
+  - `level_grid()` 產生：§3.7 ④ 的單行格式、欄位值與 `[grid]` 相同、省略的陣列產生 `::std::vec![]`
   - `docker.rs` 參數拆成獨立元素、`-v` 值為 `<暫存目錄>:/work:ro`、容器名以 `rq-judge-` 開頭且兩次產生不同、Run 與 Submit 的 rustc 參數都含 `-A dead_code` 與 `-F unsafe_code`
   - 輸出截斷：超過 64 KiB 保留前段、`stdout_truncated = true`、切在 UTF-8 字元中間時往前退
   - 暫存目錄權限：建立後目錄為 `0755`、檔案為 `0644`
   - `docker.rs` 指令組裝：**安全回歸測試**，斷言 rustc 參數含 `--edition 2024`；docker 參數必含 `--network none`、`--read-only`、`--cap-drop ALL`、`--user 1000:1000`、`--pids-limit 64`、`--memory-swap 256m`，且不含 `--privileged`、`docker.sock`
   - `content/loader.rs`：用測試用暫存目錄造關卡，驗證 §2.2 每一條規則違反時載入失敗（含 `id` 與目錄名不同、未知欄位、`chapter` 不在 `chapters.toml`、`chapters.toml` 缺檔或章節重複、`order` 重複、空 `story`）；省略欄位得到預設空陣列與 `null`；`hints` 省略得到 `[]`；測試名稱依宣告順序抽出
+  - `content/loader.rs` timeline：`visual = "timeline"` 帶 `[grid]` 或 `memory_snapshots` 時載入失敗；`timeline.rs` 缺檔時啟動失敗；starter 有／無結尾換行時組出的字串（§2.2 ①–④）；solution 同規則；`LevelDetail` 的 `grid`、`memory_snapshots` 為 `null`
   - 結果判定：§3.6 ①–⑧ 全部分支（含編譯階段 OOM 判為 `memory_limit`、被 kill 時 `exit_code = null`）與 Submit 補充規則（exit 0 但缺結果、exit 非 0 但無 failed）
 - **② 整合測試（不依賴 docker）**
   - `GET /api/levels`：`levels` 排序正確、`chapters` 只含有關卡的章節，且 JSON 中**不出現** `solution`、`tests` key
@@ -762,15 +1042,24 @@ struct JudgeConfig {
     - 做法：測試模組以 `include!("../../content/shared/grid_sim.rs")` 引入同一份模擬器，用 loader 解析出的 `[grid]` 建出 `Grid`，把 stdout 逐行交給 `assert_cleared`；不需另寫解析器
     - 判題用的 `level_grid()` 與這裡的 `Grid` 都從同一份 `[grid]` 產生，不需比對地圖
   - memory 關卡：每步 `line` 不超過對應檔案行數；`note` 以「（修正後）」開頭的步驟對照 `solution.rs`，其餘對照 `starter.rs`
+  - timeline 關卡（starter、solution 一律用 §2.2 組好的版本）
+    - solution Run：stdout 至少一個合法事件；每條有 `start` 的泳道都有 `end`（沒有 `start` 的泳道，例如 `main`，不檢查 `end`，與 ux.md §11.6 結論規則一致）；最後沒有停在 `lock_wait`／`recv_wait` 的泳道；每把鎖 `lock_got` 與 `lock_free` 成對；每個 channel `send` 數等於 `recv` 數；任何前綴都沒有循環等待
+    - solution 編譯無 warning（31 starter 以警告當線索，solution 不能多出別的警告）
+    - 33 starter Run：`status = timeout`，且事件前綴出現循環等待；靠 starter 的 `sleep(30ms)` 讓現象穩定，若不穩定就加長 sleep，不刪測試
+    - 31 starter 編譯仍有 `unused_assignments` 警告；30 starter 仍是 `E0373` 與 `E0277`（小幫手呼叫不能改掉該關設計的錯誤）
+    - 取巧反例（`backend/tests/fixtures/cheats/<level-id>/*.rs`）在 timeline 關卡比照 loader 組法（§2.2 ①–④）接上 `content/shared/timeline.rs` 後再 Submit；反例檔不自帶小幫手，避免與單一來源漂移
+    - 取巧反例 Submit 失敗時，`TestResult.message` 不含 `@tl|`（驗證 `cfg!(test)` 靜音）
+    - 事件解析只寫在後端測試輔助 `backend/tests/common/timeline.rs`（約 260 行，含事件解析、循環判定與上述各項檢查函式，依 §3.11 格式與 ux.md §11.5 循環判定），不進正式程式碼；後端正式程式碼不解析 stdout
 - v1.2 確認：①–④ 每一項都只依賴已定的檔案與 runner 映像，沒有需要手寫第二份地圖或額外工具的項目
 - **⑤ BDD（cucumber-rs）**
   - 以使用者語言描述：「送出正確解答會通過」「無限迴圈會在 5 秒內回報超時」「排隊滿時回 503」
   - `@docker` 標籤的情境在無 docker 環境以 tag filter 跳過，並在輸出中列出跳過數量
 - **⑥ 前端單元測試（Vitest）**
-  - grid stdout 指令解析器（含 1,000 步上限）、星等計算、progress store 解鎖規則與 localStorage 讀寫（含損壞資料）、草稿自動儲存、診斷 → Monaco marker 轉換
+  - grid stdout 指令解析器（含 1,000 步上限）、timeline 事件解析與狀態推導（ux.md §11.10）、星等計算、progress store 解鎖規則與 localStorage 讀寫（含損壞資料）、草稿自動儲存、診斷 → Monaco marker 轉換
 - **⑦ E2E（Playwright + playwright-bdd）**
   - 進入第一關 → 編輯 → Run 看到輸出 → Submit 通過 → 下一關解鎖 → 重新整理後進度保留
   - 預設打 mock API（`page.route`）以求穩定；另有一組 `@docker` 情境打真後端
+  - timeline：mock 的 stdout fixture 一律取自 runner 實際執行結果（死鎖、正常、31 讀到 0），不手寫；情境方向見 ux.md §11.10
 
 ### 6.3 執行指令（建議）
 
@@ -835,6 +1124,7 @@ App
     │   ├── VisualPanel
     │   │   ├── GridWorld（visual = grid）
     │   │   ├── MemoryView（visual = memory）
+    │   │   ├── TimelineView（visual = timeline，ux.md §11）
     │   │   └── PlaybackBar
     │   └── Console（輸出／編譯錯誤／測試結果三個分頁）
     ├── LevelCompleteDialog（星等、下一關）
@@ -872,6 +1162,15 @@ App
 - `status` 為 `timeout`、`memory_limit` 時：後端仍回傳已截取的 stdout，照常播放到中斷點，最後顯示對應狀態
 - Submit 不驅動 GridWorld：Submit 的 stdout 是 libtest 輸出；可視化維持最後一次 Run 的結果
 - 請求中由 `pending` prop（`phase !== 'idle'`）讓 GridWorld 回第 0 步並半透明；Submit 回來後 `pending` 解除，GridWorld 還原到上次 Run 播放結束的那一步（不重播），從未 Run 過則維持初始地圖（ux.md §4.1）
+
+**TimelineView（`visual = timeline`）**
+
+- 事件：`POST /run` 回傳的 `execution.stdout`；後端不解析（§3.11）
+- 純函式放 `domain/timeline/`：`parseTimelineEvents(stdout, truncated)` 解析行、`deriveTimeline(events, step, status)` 算出某一步的泳道、區段、箭頭、死鎖（ux.md §11.4、§11.5）
+- 事件上限 1,000 個（前端常數，與 grid 步數上限同值）；`pids-limit 64` 已限制執行緒數，泳道數不另設上限
+- `pending`、Submit 還原、請求失敗還原：與 GridWorld 相同規則（ux.md §11.7）
+- 目前事件的 `line` 以 `line-change` 事件交給 LevelView，沿用 MemoryView 的單行高亮（ux.md §11.8）
+- Console 在 timeline 關卡隱藏 `@tl|` 開頭的行，只顯示一般輸出（ux.md §11.8）
 
 **MemoryView（`visual = memory`）**
 

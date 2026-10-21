@@ -1,7 +1,7 @@
 # Rust 闖關遊戲 UX 與可視化設計規格
 
-> 狀態：v1.3（定稿；收尾第二輪驗收次要問題與工程師疑義，決策見 decisions.md §13–§15）
-> 範圍：前端 UX、版面、互動狀態、可視化元件（GridWorld、MemoryView）、進度規則、可及性、視覺風格
+> 狀態：v1.5（§11：結論只看有 start 的泳道、死鎖第一條泳道定義、泳道名稱規則；v1.4 新增 TimelineView §11；決策見 decisions.md §15 ⑬）
+> 範圍：前端 UX、版面、互動狀態、可視化元件（GridWorld、MemoryView、TimelineView）、進度規則、可及性、視覺風格
 > 技術前提：Vue 3 + Vite + TypeScript + Pinia；編輯器用 Monaco；進度存 localStorage
 > 不在本文件範圍：後端 API 細節（見 `api.md`）、關卡內容撰寫（見 `curriculum.md`）、Rust 編譯沙箱（見 `architecture.md`）
 > 決策與理由：`docs/specs/decisions.md`
@@ -19,7 +19,8 @@
   - `build`：從骨架寫出功能
   - `fix-compile`：起始程式碼編譯不過，讀 rustc 錯誤後修好
   - `debug`：能編譯也能跑，但行為錯誤，要找出 bug
-- **visual**：右欄可視化類型，三選一：`grid`、`memory`、`none`
+- **visual**：右欄可視化類型，四選一：`grid`、`memory`、`timeline`、`none`；一關只有一種
+- **泳道（lane）**：TimelineView 裡一條執行緒佔一列，橫向是事件順序（§11）
 - **Run（執行）**：編譯並執行玩家程式，顯示 stdout 與可視化，**不判定通關**
 - **Submit（送出）**：編譯並跑隱藏測試，**唯一的通關判定入口**
 - **Diagnostic（診斷）**：後端解析 rustc 輸出後的單筆錯誤或警告，格式為 `{code, message, line, column, end_line, end_column, level, explanation_url, rendered}`（定義見 api.md §0.3）
@@ -155,7 +156,7 @@
   - 右側「執行」（次要）、「送出」（主要）
 - **右欄**：上下兩區，預設 55% / 45%
   - `visual = "none"` 時可視化區隱藏，主控台佔滿右欄
-  - 可視化區底部是播放控制列（GridWorld 與 MemoryView 共用，見 §4.4）
+  - 可視化區底部是播放控制列（GridWorld、MemoryView、TimelineView 共用，見 §4.4）
   - 主控台三個分頁：「輸出」「編譯錯誤 (n)」「測試結果」；數字 badge 顯示筆數
 
 ### 2.2 平板（768–1199px）兩欄
@@ -255,6 +256,7 @@ Run 與 Submit 共用同一套狀態機，差別只在成功後的行為。
   - GridWorld：停止播放，回到第 0 步並半透明（`pending` prop，§4.1）
     - Run 回來：依新結果播放（§4.4）
     - Submit 回來：還原到上次 Run 播放結束的那一步，不重播；從未 Run 過則顯示初始地圖
+  - TimelineView：規則同 GridWorld（§11.7）
   - MemoryView：不受影響，照常可播放（§5.5）
 - 超過 3 秒仍未回應：主控台補一行「第一次編譯比較久，請稍候」
 - 同一時間只允許一個請求；loading 中再按快捷鍵不重送
@@ -264,7 +266,7 @@ Run 與 Submit 共用同一套狀態機，差別只在成功後的行為。
 
 每個狀態都定義三個位置：主控台、編輯器、可視化；按鈕與失敗計數另外註明。
 
-- 「可視化」一律只指 GridWorld；MemoryView 播放手寫快照，不受任何 Run／Submit 結果影響（§5.5）
+- 「可視化」指 GridWorld；TimelineView 依同一組狀態另有對應畫面（§11.6），下方各狀態的 GridWorld 規則（自動播放、播到中斷點、Submit 不重播）同樣適用；MemoryView 播放手寫快照，不受任何 Run／Submit 結果影響（§5.5）
 - 「算一次失敗嘗試」指本次遊玩的 `failedSubmits + 1`（§6.1）
 
 **ok（Run 成功）**
@@ -304,6 +306,9 @@ Run 與 Submit 共用同一套狀態機，差別只在成功後的行為。
   - `message` 含 `left:`、`right:` 兩行（`assert_eq!` 格式）時，拆成「實際（left）」與「預期（right）」並排，差異處反白
   - 斷言自訂訊息（`failed:` 之後的文字）放在最上面當標題
   - 拆不出來時直接顯示 `message` 原文
+- **測試程式中途當掉**（`tests` 沒有任何 `failed`、至少一個 `not_run`，且 `execution.stderr` 非空；例：stack overflow 讓整個測試程式 abort）
+  - 「測試結果」分頁頂部加一張紅色卡片「測試程式在執行途中整個當掉了，後面的測試沒有機會跑」，下方等寬字型顯示 `execution.stderr` 原文
+  - 不自動展開任何測試列（沒有失敗列可展開）
 - 可視化：不重播；維持最後一次 Run 的畫面（Submit 的 stdout 是測試輸出，不是指令）
 - 算一次失敗嘗試（影響「一次就過」星，見 §6）
 
@@ -645,6 +650,10 @@ type SnapshotError = {
   - `own`：擁有關係，例：`String` 的 stack 部分指向 heap 內容
   - `shared`：`&T` 共享借用
   - `mut`：`&mut T` 獨佔借用
+- **v1.4 確認：第二季的集合與 closure 畫面不擴充型別**，以現有欄位依下列慣例表達
+  - HashSet／HashMap 的桶（50 關）：每個**有內容的桶**是一個 `HeapBlock`，`type` 寫「桶 n」、`value` 寫元素（例 `Isle("Coral")`）；集合變數以多條 `own` 指標指向各桶；空桶不畫（MemoryView 的 heap 是縱向清單，桶多時會擠）；`error.target` 指向重複的那個桶
+  - closure 的捕捉（47 關）：closure 本身是 frame 裡的一個 `StackVar`（`type` 寫 `impl FnMut()` 之類），借用捕捉畫 `shared`／`mut` 指標指向被捕捉的變數，`move` 捕捉畫 `own` 指標指向被移入的值或其 heap 區塊，原變數標 `moved`
+  - 限制：指標的 `from` 只能是變數，不能從 heap 區塊出發；「桶陣列 → 節點」這種 heap 內部的指向無法表達，所以用「一桶一區塊」攤平；若之後關卡真的需要 heap → heap 指標（例：鏈結串列節點），最小擴充是放寬 `from` 可為 heap `id`，屆時再評估
 - **借用狀態不另開欄位**，由 `pointers` 推導：
   - 有任何 `mut` 指標指向某變數 → 該變數顯示「被獨佔借用中，暫時不能用」
   - 有 `shared` 指標指向某變數 → 該變數顯示「被共享借用中，只能讀」
@@ -895,6 +904,7 @@ type Prefs = {
 - 錯誤等級：紅／黃之外再加 ✗／⚠ 圖示與文字「錯誤」「警告」
 - 測試結果：✓／✗／— 圖示＋「通過」「失敗」「未執行」文字
 - 星等：亮星為實心、暗星為空心外框，不只靠金色與灰色
+- 時間軸：持有／等待／訊息以實心條、空心虛線條、箭頭區分，再加 ⏳ ✉ ■ ✗ 圖示與訊息列文字；死鎖另有 ✗ 與「死鎖」字樣（§11.9）
 - 驗證方式：用 Chrome DevTools 的 Deuteranopia、Protanopia、Tritanopia、Achromatopsia 模擬各檢查一次
 
 ### 7.2 鍵盤快捷鍵
@@ -919,7 +929,7 @@ macOS 用 `Cmd`，其他系統用 `Ctrl`，下文以 `Ctrl` 表示。
 ### 7.3 螢幕閱讀器與焦點
 
 - 主控台結果區設 `aria-live="polite"`，結果回來時朗讀一句摘要（例：「編譯失敗，2 個錯誤」），不朗讀全部內容
-- 可視化區提供文字替代：每步的說明列（GridWorld 訊息列、MemoryView `note`）同時放進 `aria-live` 區
+- 可視化區提供文字替代：每步的說明列（GridWorld 訊息列、MemoryView `note`、TimelineView 訊息列）同時放進 `aria-live` 區
 - 所有圖示按鈕都有 `aria-label`（例：「單步前進」）
 - 焦點順序：頂部列 → 左欄 → 編輯器 → 操作列 → 可視化 → 主控台
 - 焦點框：2px `--focus-ring` 外框，深淺色都要對比 ≥ 3:1
@@ -954,6 +964,7 @@ macOS 用 `Cmd`，其他系統用 `Ctrl`，下文以 `Ctrl` 表示。
 - Ferris：`--ferris-body`、`--ferris-shade`、`--ferris-ink`、`--ferris-eye`、`--ferris-blush`
 - 星等：`--star-on`、`--star-off`、`--star-glow`
 - 記憶體可視化（Okabe-Ito 色盲友善，非 POC 項目，沿用 v1.1）：`--mem-own`、`--borrow-shared`、`--borrow-mut`、`--mem-moved`、`--line-active`
+- 時間軸（Okabe-Ito 加深，非 POC 項目，v1.4）：`--tl-lock-1`～`--tl-lock-4`，依鎖第一次出現的順序輪流使用（§11.9）；訊息箭頭沿用 `--info`、死鎖沿用 `--danger`
 - 形狀與字型（淺深色共用）：見下方 `:root`
 - POC 名稱對照：`--muted` → `--text-muted`、`--surface-2` → `--surface-muted`、`--focus` → `--focus-ring`
 
@@ -996,6 +1007,7 @@ macOS 用 `Cmd`，其他系統用 `Ctrl`，下文以 `Ctrl` 表示。
   --star-on: #ffc94a; --star-off: #ecd9bf; --star-glow: 0 2px 0 #e0a21e;
   --mem-own: #56677A; --borrow-shared: #0072B2; --borrow-mut: #E69F00; --mem-moved: #9AA0A6;
   --line-active: rgba(0, 114, 178, 0.12);
+  --tl-lock-1: #0072B2; --tl-lock-2: #B36B00; --tl-lock-3: #007A5A; --tl-lock-4: #B3478A;
 }
 
 [data-theme='dark'] {
@@ -1016,11 +1028,13 @@ macOS 用 `Cmd`，其他系統用 `Ctrl`，下文以 `Ctrl` 表示。
   --star-on: #ffd166; --star-off: #2f5c70; --star-glow: 0 0 12px rgba(255, 209, 102, .5);
   --mem-own: #9AA8B8; --borrow-shared: #56B4E9; --borrow-mut: #F0B840; --mem-moved: #5C6166;
   --line-active: rgba(86, 180, 233, 0.16);
+  --tl-lock-1: #56B4E9; --tl-lock-2: #F0B840; --tl-lock-3: #4FD1A5; --tl-lock-4: #E59CC4;
 }
 ```
 
 - 對比要求：文字對 `--bg`／`--surface` ≥ 4.5:1、`--text-muted` ≥ 4.5:1、`--focus-ring` ≥ 3:1；POC 數值未逐一量測，實作時用 DevTools 檢查，不達標就微調並回寫本節
 - 借用色在色盲模擬下仍需可分辨；但規格要求不能只靠顏色，線型與標籤才是主要區分（§5.3）
+- `--tl-lock-*` 是圖形色，對 `--surface` 需 ≥ 3:1（WCAG 1.4.11）；估算值已達標，實作時量測，不達標就微調並回寫本節
 - `--move-ease` 的回彈在 reduced-motion 時不使用：一律不做位移補間（§7.4）
 
 ### 8.3 深淺色模式
@@ -1090,6 +1104,9 @@ macOS 用 `Cmd`，其他系統用 `Ctrl`，下文以 `Ctrl` 表示。
   - GridWorld `pending` prop，Submit 後還原到上次 Run 終點（§3.2、§4.1）；MemoryView 播完保留最後一步行高亮（§5.4）
   - 確認對話框用自訂 `ConfirmDialog`（§6.2、§6.6）；跨章鎖定 tooltip 指前一章第一個未通過關卡（§1.1）
   - 413 只看狀態碼；`Retry-After` 只接受整數秒；`{name}` 抓不到時「這個值」為純文字；Submit 超時預設「輸出」分頁（§3.3、§3.4）
+- **v1.4 定案**（decisions.md §15 ⑬）
+  - 新增 `visual = "timeline"` 與 TimelineView（§11）；事件來源為 Run stdout 的 `@tl|` 行，由 starter 檔尾的小幫手印出
+  - 一關只有一種 visual；時間軸只陳述事實，不給修法
 
 ## 10. 需求外項目處理結果
 
@@ -1098,9 +1115,391 @@ macOS 用 `Cmd`，其他系統用 `Ctrl`，下文以 `Ctrl` 表示。
   - 指令步數上限 1,000 步：§4.3
 - **不做**
   - 播放「上一步」按鈕：進度條已可跳步
+  - v1.4 時間軸：毫秒時間軸、訊息內容標籤、一關多種 visual（分頁切換）、Submit 驅動時間軸、編輯器同時高亮多行、泳道摺疊、事件原文切換鈕（理由見 decisions.md §15 ⑬）
   - 欄寬可拖曳調整：之後加不影響資料結構
   - ASCII 地圖寫法：`[grid]` 只用座標陣列
   - 章節以星數解鎖隱藏關卡：星等只有收集價值
   - v1.2 刪除（無資料來源或與既有呈現重複，decisions.md §14）：開場對話、「繼續上次進度」按鈕、章節完成過場與徽章、Ferris 反應台詞池、`ferris` fenced block、`LevelProgress.cleared`、`Prefs.playbackSpeed`、`Ctrl+.` 與 `?` 快捷鍵、GridWorld `step-change`／`finished` 事件與 `GridResult`、主控台 stdout 與播放步同步、Run 耗時顯示
 - **排入後續版本**
   - 錯誤圖鑑：MVP 只涵蓋 4 種錯誤碼，收藏感不足；後續關卡補齊後再評估（decisions.md §12）
+
+---
+
+## 11. TimelineView 元件規格
+
+TimelineView 把玩家程式 Run 時印出的 `@tl|` 事件畫成泳道圖：誰拿到鎖、誰在等、訊息何時送達、死鎖時誰卡在哪。
+
+### 11.1 定位與資料來源
+
+- 用在 `visual = "timeline"` 的關卡；一關只有一種 visual，不與 GridWorld 並存
+- 資料：Run 回傳的 `execution.stdout`，只看 `@tl|` 開頭的行（格式見 architecture.md §3.11）
+  - 事件由 starter 檔尾的時間軸小幫手（`mod timeline`）印出；玩家呼叫 `timeline::lock`、`timeline::send`、`timeline::recv`、`timeline::lane`、`timeline::note`
+- TimelineView **只負責視覺回放**；通關只看 Submit，Submit 不驅動時間軸（與 GridWorld 相同）
+- 時間軸是「這一次 Run 的真實順序」：執行緒交錯每次可能不同，畫面不假裝可重現
+  - 圖例下方常駐一行小字：「每次執行的先後順序可能不同」
+- **只陳述事實，不給修法**：文案寫「誰等誰、誰佔著什麼」，不寫「請依編號上鎖」「記得 drop(tx)」；修法屬於提示，揭露才計入 ★2（§6.1）
+
+### 11.2 元件介面
+
+```ts
+// TimelineView.vue
+props: {
+  stdout: string | null    // null：尚未執行，或 execution = null
+  status: RunStatus | null // Run 回傳的 status；null 表示尚未執行
+  truncated: boolean       // execution.stdout_truncated
+  pending: boolean         // Run／Submit 請求中（§11.7）
+}
+emits: {
+  'line-change': [line: number | null]  // 目前事件的行號，交給 LevelView 做編輯器高亮（§11.8）
+}
+```
+
+- 與 GridWorld 相同的四個 props，LevelView 依 `visual` 擇一渲染
+- `line-change` 與 MemoryView 同名同語意，LevelView 沿用同一條高亮管線
+
+### 11.3 版面
+
+可視化區桌機寬約 390px，版面以窄寬度為基準設計，事件多時在元件內橫向捲動。
+
+```
+┌ 時間軸 ───────────────────────────────────────────┐
+│ 🔒① 窄橋 0  🔒② 窄橋 1  ✉ 回報                     │
+│ ▬ 持有  ┄ 等待  ➝ 訊息    每次執行的先後順序可能不同 │
+│               1    5    10   15   20          步   │
+│ ✉ main       ┄┄┄┄┄┄┄✉┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄ …       │
+│                     ▲（分身 2 的訊息送達）         │
+│ ✗ 分身 0  死鎖  ●─▬▬①▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬ …           │
+│                       ┄┄②⏳┄┄┄┄┄┄┄┄┄┄ ✗            │
+│ ✗ 分身 1  死鎖   ●──▬▬②▬▬▬▬▬▬▬▬▬▬▬▬▬ …            │
+│                        ┄┄①⏳┄┄┄┄┄┄┄┄┄ ✗           │
+│ ■ 分身 2          ●─✉─■                           │
+├────────────────────────────────────────────────────┤
+│ 第 21 步 · 第 45 行：分身 1 想拿 窄橋 0（被 分身 0 佔著）│
+│ ✗ 死鎖：分身 0 等 窄橋 1（被 分身 1 佔著）；         │
+│         分身 1 等 窄橋 0（被 分身 0 佔著）           │
+├────────────────────────────────────────────────────┤
+│ [⏮] [▶] [⏭]  速度 [1x ▾]  ●──────────● 第 21 / 21 步 │
+└────────────────────────────────────────────────────┘
+```
+
+- **圖例列**：每把鎖一個代號 ①②③…（依第一次出現的順序）＋鎖名、每個 channel ✉＋名稱；第二行是線型說明與「先後可能不同」小字
+- **時間軸刻度**：x 軸是事件序號（第 n 步），每 5 步一個刻度；不是毫秒
+- **泳道**：一條執行緒一列
+  - 左側標籤欄固定（橫向捲動時不動）：狀態圖示＋泳道名稱；狀態圖示見 §11.9
+  - 排序：`main` 置頂，其餘依第一個事件出現的先後
+  - 泳道名稱即識別：`thread` 相同的事件畫在同一條泳道
+  - **具名泳道**：有 `start` 事件的泳道（該執行緒呼叫過 `timeline::lane`）；沒有 `start` 的泳道（例如 `main`）只畫它的事件與區段，沒有開始、結束標記
+  - 泳道在解析完全部事件時就全部配置好（版面不跳動）；還沒輪到第一個事件的泳道標籤以 40% 透明度顯示
+  - 同一泳道同時有多個區段（例：握著窄橋 0 又在等窄橋 1）時往下疊一層，泳道高度隨最大重疊數增加
+- **欄寬**：每步一欄，欄寬 = 可用寬度 ÷ 事件數，夾在 14–32px；超出時元件內橫向捲動，播放時自動把目前步捲進可見範圍
+- **訊息列**：兩行
+  - 第一行：目前這一步的事件句（§11.6 句型）
+  - 第二行：播到最後一步時的結論（§11.6），或解析警示（格式不對的行數、超過上限）
+- **播放控制列**：共用 `<PlaybackBar>`（§4.4）
+- 泳道多時（上限受判題 `pids-limit 64` 約束）可視化區內縱向捲動，圖例與刻度列固定在頂部
+
+**窄寬度（可視化區容器 < 360px，例：手機「結果」分頁）**
+
+- 標籤欄縮為 64px，泳道名稱超出時省略（完整名稱放 `title` 與 `aria-label`）
+- 圖例改為可換行；「先後可能不同」小字移到訊息列下方
+- 其餘不變；永遠不讓頁面本身出現橫向捲軸，橫向捲動只發生在時間軸區內
+
+### 11.4 事件解析
+
+```ts
+type TimelineEventKind =
+  | 'start' | 'end'
+  | 'lock_wait' | 'lock_got' | 'lock_free'
+  | 'send' | 'recv_wait' | 'recv' | 'recv_closed'
+  | 'note'
+
+interface TimelineEvent {
+  kind: TimelineEventKind
+  line: number | null  // 編輯器行號；lock_free、end 為 null
+  thread: string       // 泳道名稱
+  target: string       // 鎖名、channel 名、標註文字；start、end 為空字串
+}
+
+interface ParsedTimeline {
+  events: TimelineEvent[]  // 最多 1,000 個
+  malformed: number        // 以 @tl| 開頭但格式不對的行數
+  capped: boolean          // 是否超過 1,000 個被截掉
+}
+
+// domain/timeline/：純函式
+function parseTimelineEvents(stdout: string, truncated: boolean): ParsedTimeline
+```
+
+**解析規則**（逐行處理 stdout）
+
+```
+① 切行
+  ↓
+② 截斷處理
+  ↓
+③ 判斷是否為事件
+  ↓
+④ 拆欄位並驗證
+  ↓
+⑤ 加入事件或計入格式錯誤
+```
+
+① 以 `\n` 切行，去掉行尾 `\r`；不去除行首空白
+② `truncated = true` 時丟棄最後一行（可能不完整，與 grid 相同）
+③ 行首（第 1 欄）就是 `@tl|` 才算事件行；其餘是一般輸出，只給主控台
+④ 去掉 `@tl|` 後以 `|` 切成最多 4 段：`kind`、`line`、`thread`、`target`（第 4 段取剩下全部）
+  - `kind` 必須是十種之一
+  - `line` 為空字串（→ `null`）或 `^[1-9][0-9]*$`
+  - `thread` 去除頭尾空白後不可為空；`TimelineEvent.thread` 存修剪後的值（泳道比對用修剪後的名稱）
+  - `target`：`lock_*`、`send`、`recv*`、`note` 不可為空；`start`、`end` 的 `target` 一律當空字串
+  - 段數不足 4 段即格式錯誤
+⑤ 合法事件依行序加入；格式錯誤只累加 `malformed`，不加入、不中斷解析
+  - 合法事件第 1,001 個起不再加入，`capped = true`
+
+- 事件之間的一致性（例如沒有對應 `lock_got` 的 `lock_free`）不在解析時檢查；畫不出來的就略過，不報錯（§11.5）
+- 泳道名稱的約束由關卡程式負責、前端不檢查（architecture.md §3.11）：同一關內各執行緒的 `lane` 名稱須唯一；`lane` 須在該執行緒第一個事件之前呼叫，否則前面的事件會落在 std 執行緒名的另一條泳道
+- 事件行永遠不是 grid 指令嘗試（`@` 不在 `[A-Z_]`），兩個解析器互不干擾
+
+### 11.5 狀態推導：泳道、區段、箭頭、死鎖
+
+`deriveTimeline(events, step, status)` 算出「播到第 `step` 步」時的畫面（只看前 `step` 個事件）；以下欄位為建議形狀，名稱以前端單元測試釘死為準。
+
+```ts
+type LaneState = 'not_started' | 'running' | 'waiting_lock' | 'waiting_msg' | 'ended' | 'deadlocked'
+
+interface TimelineState {
+  lanes: { name: string; state: LaneState; line: number | null }[]   // line：該泳道最近一個有行號的事件
+  segments: {
+    lane: string
+    kind: 'hold' | 'wait_lock' | 'wait_msg'
+    target: string           // 鎖名或 channel 名
+    from: number; to: number | null   // 步數；null 表示到目前仍未結束
+    deadlocked: boolean
+  }[]
+  messages: { channel: string; from: { lane: string; step: number }; to: { lane: string; step: number } | null }[]
+  marks: { lane: string; step: number; kind: 'start' | 'end' | 'recv_closed' | 'note'; text: string }[]
+  deadlock: { lane: string; waits: string; heldBy: string }[] | null  // 依循環順序
+}
+```
+
+**區段**
+
+- `hold`：某泳道 `lock_got(L)` 開始，到同一泳道 `lock_free(L)` 結束；沒有對應 `lock_got` 的 `lock_free` 略過
+- `wait_lock`：`lock_wait(L)` 開始，到**同一泳道的下一個事件**結束（正常是 `lock_got`）；理由：卡住的執行緒不會再印任何事件
+- `wait_msg`：`recv_wait(ch)` 開始，到同一泳道的下一個事件結束（`recv` 或 `recv_closed`）
+
+**訊息箭頭**
+
+- 每個 channel 名稱各自配對：第 k 個 `send` 對第 k 個 `recv`（小幫手保證先進先出，architecture.md §3.11）
+- 箭頭從送出那一步、送方泳道，指到收到那一步、收方泳道
+- 還沒被收到的 `send`：畫一小段虛線殘箭，尾端 ✉，表示「訊息在 channel 裡排隊」
+- 配對結果 `recv` 排在 `send` 之前（只可能是玩家印了假事件）：不畫箭頭
+- `recv_closed`：收方泳道該步畫 ⊘，代表 channel 已關閉
+
+**泳道狀態**（第 `step` 步）
+
+- `not_started`：還沒有任何事件
+- `ended`：已出現 `end`
+- `deadlocked`：屬於下方死鎖循環
+- `waiting_lock`／`waiting_msg`：最後一個事件是 `lock_wait`／`recv_wait`
+- `running`：其他情況
+
+**死鎖判定（循環等待）**
+
+```
+① 找出每把鎖的持有者
+  ↓
+② 建等待關係
+  ↓
+③ 找循環
+  ↓
+④ 標記
+```
+
+① 鎖 L 的持有者＝有未結束 `hold(L)` 區段的泳道（多個時取最近開始的）
+② 泳道 T 最後一個事件是 `lock_wait(L)` 且 L 有持有者 H → 一條等待關係 T → H
+  - H 就是 T 自己（同一執行緒重複鎖同一把 `Mutex`）也算，循環長度為 1
+③ 每條泳道最多一條往外的等待關係，沿著走回到起點即為循環
+  - **循環的第一條泳道**＝循環中依泳道排序（§11.3：`main` 置頂、其餘依首次出現）最前者；`deadlock` 陣列從它開始，沿等待關係排列
+④ 循環上的泳道狀態改為 `deadlocked`；它們的 `wait_lock` 區段，以及被等待那把鎖的 `hold` 區段，`deadlocked = true`
+- 只有鎖會形成等待關係；`recv_wait` 不算（看不到誰還握著 Sender），顯示為 `waiting_msg`
+- 依事件順序保證，前綴出現循環就是真的死鎖，之後不會解開；因此每一步都判定，循環一出現就標紅並維持到最後
+- 判定不看 `status`：就算 `status = ok`（`main` 沒 join 就結束，卡住的執行緒被一起收掉）也照實標出
+
+### 11.6 結果狀態下的顯示
+
+每個狀態都定義三件事：時間軸、訊息列結論、是否自動播放。
+
+**事件句型**（訊息列第一行與 `aria-live`；前綴「第 n 步 · 第 L 行：」，`line = null` 時省略「· 第 L 行」）
+
+- `start`：「T 開始」
+- `end`：「T 結束」
+- `lock_wait`：「T 想拿 L」；L 此刻有持有者 H 時補「（被 H 佔著）」，H 是 T 自己時補「（被自己佔著）」
+- `lock_got`：「T 拿到 L」
+- `lock_free`：「T 放開 L」
+- `send`：「T 往 ch 送出一則訊息」
+- `recv_wait`：「T 等 ch 的訊息」
+- `recv`：「T 從 ch 收到一則訊息（S 送的）」，S 為配對的送方
+- `recv_closed`：「ch 已關閉，T 不會再收到訊息」
+- `note`：「T：文字」
+
+**尚未執行（`stdout = null` 且 `status = null`）**
+
+- 只顯示圖例區與空白軸，中央一行：「按『執行』，看看每條執行緒怎麼跑」
+- 播放控制列 disabled
+
+**結論只看具名泳道（§11.3）**：沒有 `start` 的泳道（例如 `main`）不參與「全部執行緒都結束了」「還有 n 條沒做完」「其他執行緒都已結束」的判斷，也不畫未結束尾端「…」；它本來就不會有 `end`
+
+**ok（Run 成功）**
+
+- 自動從第 1 步播放
+- 結論：全部具名泳道都 `ended` →「全部執行緒都結束了」（沒有任何具名泳道時同此句）
+- 有具名泳道沒有 `end`（`main` 先結束）→「程式結束時，還有 n 條執行緒沒做完（名稱、名稱）」，這些泳道尾端畫「…」
+- 有死鎖循環 → 改用死鎖結論（見 timeout）
+
+**compile_error**
+
+- 不畫泳道；中央一行「程式還沒編譯成功」；播放控制列 disabled
+
+**runtime_panic**
+
+- 自動播放到最後一個事件；結論「程式在這裡結束（panic）」
+- 沒有 `end` 的具名泳道尾端畫「…」
+
+**timeout**（死鎖的主要情境）
+
+- 自動播放到最後一個事件
+- 結論依序擇一
+  - 有死鎖循環：「✗ 死鎖：T1 等 L1（被 T2 佔著）；T2 等 L2（被 T1 佔著）」，從循環的第一條泳道（§11.5 ③）開始，依循環順序列出每一條
+  - 沒有循環但有泳道在等：「時間到：還有 n 條執行緒在等」；各泳道的等待原因看標籤與區段
+    - `waiting_msg` 的泳道，若其他**具名**泳道此時都已 `ended`（至少一條），標籤旁補「其他執行緒都已結束」（陳述事實，不說原因）
+  - 都沒有：「時間到」
+- 死鎖時另見 §11.8 編輯器高亮
+
+**memory_limit**
+
+- `execution` 有值：自動播放到最後一個事件，結論「記憶體不足」
+- `execution = null`：同 compile_error，中央一行「程式還沒編譯成功」換成「編譯時用太多記憶體」
+
+**output_limit**
+
+- 先丟棄最後一行再解析（§11.4 ②），自動播放，結論「輸出過長已截斷」
+
+**test_failed、Submit 的任何結果**
+
+- Submit 不驅動時間軸：維持最後一次 Run 的畫面（§11.7）
+
+**請求失敗（server_busy、judge_unavailable、payload_too_large、network_error）**
+
+- 時間軸還原成請求前的畫面（上次 Run 的最後一步，或尚未執行的空白狀態），不清空、不重播
+- 訊息由主控台卡片負責（§3.3），時間軸不另顯示
+
+**零事件與解析警示**（與上面各狀態疊加）
+
+- 有 `execution` 但 0 個合法事件：中央一行「這次執行沒有時間軸事件：要透過 `timeline::` 小幫手上鎖、送訊息，時間軸才看得到（按『重設』可取回小幫手）」
+  - 主要情境：玩家刪掉了小幫手呼叫，或沿用第一季留下的草稿
+- `malformed > 0`：結論後補「有 n 行時間軸事件格式不對，已略過」
+- `capped = true`：結論後補「事件超過 1,000 個，後面的不顯示了」
+
+### 11.7 播放控制與時機
+
+- 共用 `<PlaybackBar>`（§4.4），速度與步長相同（1x 每步 500ms）
+- **第 0 步**：泳道已配置、沒有任何區段；「從頭」回到第 0 步（同 GridWorld）
+- 「第 n / N 步」的 N 為合法事件數；N = 0 時播放控制列 disabled
+- **自動播放時機**：與 GridWorld 相同，Run 回傳 `ok`、`runtime_panic`、`timeout`、`memory_limit`、`output_limit` 且 `execution` 不為 null 時，從第 1 步播放
+- **`pending`**：回第 0 步並半透明
+  - Run 回來：依新結果自動播放
+  - Submit 回來、請求失敗：還原到上次 Run 播放結束的那一步，不重播；從未 Run 過則回到空白狀態
+- 點時間軸上的任一事件標記：跳到該步並暫停（不播放中間動畫）
+- 鍵盤：可視化區取得焦點時沿用 §7.2（`Space`、`→`、`Home`）
+
+### 11.8 與主控台、編輯器的互動
+
+**主控台**
+
+- timeline 關卡的「輸出」分頁**隱藏** `@tl|` 開頭的行，只顯示一般 `println!` 輸出
+  - 有隱藏時，輸出頂部一行淡色小字「已隱藏 n 行時間軸事件」
+  - 理由：33 的除錯心法是「卡住時看主控台最後幾行」，事件行會把玩家自己的輸出淹沒
+- 隱藏只發生在畫面；`execution.stdout` 原文不變
+- 其他分頁（編譯錯誤、測試結果）不受影響
+
+**編輯器**
+
+- 播放到哪一步，就 `line-change` 該事件的 `line`；`line = null`（`lock_free`、`end`）時沿用前一個有行號事件的行，不清除高亮
+- 死鎖時（結論為死鎖的最後一步）：高亮循環的第一條泳道（循環中依泳道排序最前者，§11.5 ③）等待的那一行
+- 點泳道標籤：`line-change` 該泳道在目前這一步之前最近一個有行號的事件；不改變目前步數
+  - 用途：死鎖時逐一點各隻分身，看牠們各自停在哪一行
+- 程式碼在這次 Run 之後被修改：沿用主控台「程式已修改」狀態（§3.1 ④），訊息列上方顯示黃色提示「程式碼已修改，行號高亮僅供參考」
+- 不做反向同步（點行號跳到步驟）：同一行常對應多個事件，例如迴圈裡的 `lock`
+
+### 11.9 視覺編碼與可及性
+
+每種狀態用「填色或線型＋圖示＋文字」至少三重編碼，任一單獨存在都能辨識。
+
+- **持有鎖（`hold`）**
+  - 實心條，填該鎖的 `--tl-lock-n`，2px `--ferris-ink` 描邊
+  - 條頭標鎖代號（①②…），條長不足 2 欄時代號移到 tooltip
+- **等鎖（`wait_lock`）**
+  - 空心條，2px **虛線**外框（dash 4 3），顏色為該鎖的 `--tl-lock-n`
+  - 條頭 ⏳＋鎖代號
+- **等訊息（`wait_msg`）**
+  - 空心條，2px **點線**外框，`--info`
+  - 條頭 ✉⏳
+- **訊息箭頭**：`--info` 2px 實線、實心箭頭；未送達的殘箭為虛線，尾端 ✉
+- **channel 關閉**：⊘ 圖示
+- **開始／結束**：● 實心圓／■ 方塊
+- **標註**：🚩 小旗，文字不畫在圖上（太窄），進訊息列與 tooltip
+- **泳道狀態圖示**（標籤欄）：`running` ▶、`waiting_lock` ⏳、`waiting_msg` ✉、`ended` ■（標籤改 `--text-muted`）、`deadlocked` ✗＋「死鎖」字樣、`not_started` 40% 透明
+- **死鎖**
+  - 循環上的泳道：標籤 `--danger` 文字＋✗＋「死鎖」
+  - `deadlocked = true` 的區段：外加 3px `--danger` 實線外框，條尾 ✗；原本的填色與虛線保留（疊加，不取代）
+  - 從等待區段尾端畫一條 `--danger` 虛線箭頭指向持有者那條 `hold` 區段，箭頭標 ✗
+  - 圖層在最上層
+- **鎖的顏色**：依第一次出現的順序用 `--tl-lock-1`～`--tl-lock-4`，第 5 把起循環使用；顏色重複時靠代號與圖例區分
+- **背景**：泳道交錯底色 `--surface`／`--surface-muted`，分隔線 `--border`
+- 用 SVG 繪製（同 GridWorld）
+
+**可及性**
+
+- 每一步的事件句（§11.6）放進 `aria-live="polite"`；播到最後一步時再朗讀結論
+- SVG 設 `role="img"`，`aria-label` 為摘要：「n 條執行緒、m 把鎖、k 個 channel，第 s / N 步」
+- 泳道標籤是按鈕（§11.8），`aria-label` 含名稱與狀態，例：「分身 0，死鎖，等窄橋 1」
+- 事件標記可用 Tab 走訪（只走目前已播放的事件），`Enter` 跳到該步
+- `prefers-reduced-motion: reduce`：箭頭與區段直接出現、不做畫線動畫；自動捲動直接跳位
+- 色盲模擬（§7.1 四種）下仍能分辨持有／等待／訊息／死鎖：主要靠實心、虛線、點線、✗ 與文字
+
+### 11.10 測試方向（交給 BDD 與前端第一棒）
+
+**前端單元測試（Vitest，純函式）**
+
+- `parseTimelineEvents`
+  - 十種 kind 各一筆合法事件；`line` 空字串為 `null`
+  - 格式錯誤：未知 kind、段數不足、`line` 為 `0` 或非數字、`thread` 空白、`lock_*` 缺 `target`；都只累加 `malformed`
+  - 行首有空白的 `@tl|` 不算事件；`\r\n` 行尾；`truncated` 時丟最後一行；第 1,001 個起 `capped`
+  - 一般輸出行不進事件；同一份 stdout 給 `parseGridCommands` 不產生任何指令嘗試
+- `deriveTimeline`
+  - 泳道排序（`main` 置頂、其餘依首次出現）；`not_started` 到 `ended` 的狀態變化；`thread` 前後空白修剪後歸同一泳道
+  - `hold` 開關、同泳道重疊時疊層；`wait_lock`、`wait_msg` 由同泳道下一個事件結束
+  - 訊息依 channel 先進先出配對；未送達殘箭；`recv_closed`
+  - 死鎖：兩條循環、三條循環、自己等自己；等待鏈不成環（A 等 B、B 在等訊息）不算死鎖；循環出現的那一步起維持標紅；`deadlock` 陣列從循環中泳道排序最前者開始（循環後出現的泳道先進入等待時亦同）
+  - 結論選擇：ok 全結束、ok 有沒做完、timeout 死鎖、timeout 等訊息且其他都結束、timeout 無等待、runtime_panic、memory_limit、output_limit、零事件、malformed、capped
+  - 具名泳道：`main` 沒有 `start` 且沒有 `end` 時，ok 仍為「全部執行緒都結束了」、runtime_panic 不在 `main` 畫「…」；`main` 在等訊息、其他具名泳道都 `ended` 時補「其他執行緒都已結束」
+
+**元件測試**
+
+- 七種狀態與尚未執行的畫面；`pending` 半透明與三種還原（Run、Submit、請求失敗）
+- 死鎖時同時出現 ✗、「死鎖」文字、`--danger` 類別（不只靠顏色）
+- `line-change` 的時機（播放、`line = null` 沿用、點泳道標籤、死鎖最後一步高亮循環第一條泳道的等待行）
+- 窄寬度（< 360px）標籤欄縮寬、頁面無橫向捲軸
+- 主控台在 timeline 關卡隱藏 `@tl|` 行並顯示隱藏行數
+
+**e2e（playwright-bdd，`features/ui_timeline.feature`）**
+
+- mock stdout 一律取自 runner 實際執行（33 starter 死鎖、33 solution、31 starter 讀到 0、30 solution）
+- 33 starter Run → 主控台 timeout 卡片＋時間軸死鎖結論＋兩條泳道 ✗＋編輯器高亮等待那一行
+- 33 solution Run → 「全部執行緒都結束了」、訊息箭頭數等於回報數
+- 31 starter Run → 三條螃蟹泳道的標註都是「讀到 0」，且標註出現在「放開 計數器」之後
+- 30 starter Run → 「程式還沒編譯成功」
+- 舊草稿（沒有小幫手呼叫）Run → 零事件提示
+- Submit 後時間軸還原、不重播
+- `@docker` 一個情境：真後端跑 33 solution，時間軸出現 3 條分身泳道與 `main`

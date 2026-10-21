@@ -1,6 +1,6 @@
 # Rust Quest API 規格
 
-> 狀態：v1.3（定稿；收尾第二輪驗收次要問題與工程師疑義，決策見 decisions.md §13–§15）
+> 狀態：v1.5（與其他四份規格同步升版，API 契約無異動；v1.4 `LevelVisual` 新增 `timeline`；決策見 decisions.md §15 ⑬）
 > Base URL：`http://127.0.0.1:3000`（開發時前端經 Vite proxy 轉送 `/api`）
 > 相關文件：`docs/specs/architecture.md`、`docs/specs/ux.md`（`GridDef`、`MemorySnapshot` 的來源）、`docs/specs/decisions.md`
 
@@ -147,11 +147,14 @@
 - `output_limit`：stdout 或 stderr 超過 64 KiB 被終止
   - Run 與 Submit 共用同一套判定，但 Submit 時 libtest 預設捕捉測試內的輸出，實務上極少觸發；BDD 情境只針對 Run
 - 判定優先順序：`timeout` → `memory_limit` → `compile_error` → `output_limit` → `runtime_panic`／`test_failed` → `ok`（細節見 architecture.md §3.6）
+- 程式 abort（例：stack overflow，exit 134）：Run 為 `runtime_panic`；Submit 為 `test_failed`，已完成的測試照實、正在跑與之後的測試為 `not_run`、沒有任何 `failed`；`execution.exit_code = 134`，`execution.stderr` 含 `has overflowed its stack` 訊息（architecture.md §3.6）
 - 七種值都是正式狀態，前端各有對應畫面（ux.md §3.3）
 
 **`LevelKind`**：`"build" | "fix-compile" | "debug"`
 
-**`LevelVisual`**：`"grid" | "memory" | "none"`
+**`LevelVisual`**：`"grid" | "memory" | "timeline" | "none"`
+
+- `timeline`：Run 的 stdout 含 `@tl|` 事件行，前端畫並行時間軸（事件格式見 architecture.md §3.11，畫法見 ux.md §11）；沒有專屬資料欄位
 
 **`GridDef`**（來源：`level.toml` 的 `[grid]`，格式以 ux.md §4.2 為準）
 
@@ -384,6 +387,19 @@
 - `starter`：起始程式碼；前端「重設」按鈕用此值
 - `grid`：`GridDef | null`；`visual = "grid"` 時必有值，其他為 `null`（§0.3）
 - `memory_snapshots`：`MemorySnapshot[] | null`；`visual = "memory"` 時必有值，其他為 `null`（§0.3）
+- `visual = "timeline"`：不新增欄位，`grid`、`memory_snapshots` 皆為 `null`
+  - `starter` 尾端已含時間軸小幫手 `mod timeline`（loader 啟動時把 `content/shared/timeline.rs` 接在 `starter.rs` 之後，architecture.md §2.2）；「重設」取回的也是含小幫手的版本
+  - 範例（只列與 grid 範例不同的欄位，`starter` 節錄）：
+
+```json
+{
+  "id": "33-boss-great-migration",
+  "visual": "timeline",
+  "starter": "use std::sync::mpsc;\n……\nfn main() {\n    ……\n}\n\n// ===== 時間軸小幫手：把事件印給右邊的時間軸看，不改變程式行為（不用改） =====\nmod timeline {\n……\n}\n",
+  "grid": null,
+  "memory_snapshots": null
+}
+```
 - **絕不包含** `solution`、`tests`
 
 ### 錯誤
@@ -512,6 +528,10 @@
   - 後端 stdout 上限 64 KiB，超過回 `stdout_truncated = true`、`status = "output_limit"`；前端另設指令步數上限 1,000 步
   - `status` 為 `timeout`、`memory_limit`、`output_limit` 時 `execution.stdout` 仍含終止前已輸出的指令，可播放到中斷點
 - Run 不回傳 `stdout` 以外的 grid 判定結果；通關只看 Submit
+- `visual = "timeline"` 的關卡：前端從 `execution.stdout` 解析 `@tl|` 開頭的事件行驅動 TimelineView（格式見 architecture.md §3.11）
+  - 後端不解析、不過濾事件行；上限、截斷、`timeout` 時保留已輸出內容的規則與 grid 相同
+  - 範例（33 starter 死鎖，節錄；行號為 starter 實際行號，事件交錯每次 Run 不同）：`status = "timeout"`、`execution.stdout` 為 `"@tl|start|36|分身 0|\n@tl|lock_wait|39|分身 0|窄橋 0\n……\n@tl|recv_wait|58|main|回報\n……\n@tl|lock_wait|39|分身 0|窄橋 1\n@tl|lock_wait|39|分身 1|窄橋 0\n"`
+  - Submit 時小幫手不印事件（`cfg!(test)`），Submit 的 stdout 不含事件行
 - panic 位置格式為 `/tmp/main.rs:<行>:<欄>`，行號與編輯器一致（Run 只編譯使用者程式碼）
 - 編譯超時範例：`status = "timeout"`、`compile.timed_out = true`、`compile.success = false`、`execution = null`
 - 沒有 `main` 的程式碼會得到 rustc `E0601` 的 `compile_error`
@@ -592,7 +612,7 @@
 }
 ```
 
-**範例：部分失敗，含 warning**（`31-shared-counter` 的 starter）
+**範例：部分失敗，含 warning**（`31-shared-counter` 的 starter，即 GET 回傳的 `starter`，尾端含 timeline 小幫手）
 
 ```json
 {
@@ -603,26 +623,15 @@
     "timed_out": false,
     "diagnostics": [
       {
-        "code": "unused_variables",
-        "message": "variable `sum` is assigned to, but never used",
-        "line": 6,
-        "column": 9,
-        "end_line": 6,
-        "end_column": 16,
-        "level": "warning",
-        "explanation_url": null,
-        "rendered": "warning: variable `sum` is assigned to, but never used\n --> /tmp/main.rs:6:9\n  |\n6 |     let mut sum = *total.lock().unwrap();\n  |         ^^^^^^^\n  |\n  = note: consider using `_sum` instead\n...\n"
-      },
-      {
         "code": "unused_assignments",
         "message": "value assigned to `sum` is never read",
-        "line": 7,
+        "line": 8,
         "column": 5,
-        "end_line": 7,
+        "end_line": 8,
         "end_column": 16,
         "level": "warning",
         "explanation_url": null,
-        "rendered": "warning: value assigned to `sum` is never read\n --> /tmp/main.rs:7:5\n  |\n7 |     sum += gems;\n  |     ^^^^^^^^^^^\n  |\n  = help: maybe it is overwritten before being read?\n...\n"
+        "rendered": "warning: value assigned to `sum` is never read\n --> /tmp/main.rs:8:5\n  |\n8 |     sum += gems;\n  |     ^^^^^^^^^^^\n  |\n  = help: maybe it is overwritten before being read?\n...\n"
       }
     ]
   },
@@ -811,7 +820,7 @@
 
 ```ts
 type LevelKind = 'build' | 'fix-compile' | 'debug'
-type LevelVisual = 'grid' | 'memory' | 'none'
+type LevelVisual = 'grid' | 'memory' | 'timeline' | 'none'
 
 interface ChapterSummary { chapter: number; title: string }
 
@@ -828,6 +837,8 @@ interface LevelDetail extends LevelSummary {
   grid: GridDef | null
   memory_snapshots: MemorySnapshot[] | null
 }
+
+// timeline 沒有 API 欄位；事件型別 TimelineEvent 是前端解析 stdout 的內部型別（ux.md §11.4），不屬於本契約
 
 // 與 ux.md §4.2 [grid] 一致；座標 [x, y]
 type Point = [number, number]
