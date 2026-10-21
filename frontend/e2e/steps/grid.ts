@@ -14,6 +14,7 @@ Step(/^播放控制列顯示「(第 \d+ \/ \d+ 步)」$/, async ({ world }, text
 })
 
 Step(/^約 500 ms 後播放控制列顯示「(第 \d+ \/ \d+ 步)」$/, async ({ world }, text: string) => {
+  if (world.clockPaused) await world.page.clock.runFor(500)
   await expect(world.stepLabel()).toHaveText(text, { timeout: 1000 })
 })
 

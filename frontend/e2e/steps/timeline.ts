@@ -223,8 +223,8 @@ Step(
     if (stderrName) body.execution.stderr = APPENDIX.stderr.get(stderrName)
     if (status === 'timeout') expect(body.execution.timed_out).toBe(true)
     setRun(mock, body, delay ? Number(delay) * 1000 : 0)
-    // 延遲回應的 Run：點 Run 前停住時鐘，自動播放停在第 1 步
-    if (delay) world.pauseClockOnRequest = true
+    // 點 Run 前停住時鐘，自動播放停在第 1 步，由測試推進
+    world.pauseClockOnRequest = true
   },
 )
 
