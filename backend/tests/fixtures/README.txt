@@ -10,3 +10,8 @@ fixtures 來源
   - rustc/synthetic_non_json_line.jsonl：真實 E0382 行之間插入一行連結器錯誤原文
   - rustc/synthetic_ice_level.jsonl：真實語法錯誤的 level 改為 internal compiler error
   - libtest/partial_fail_no_thread_id.txt：去掉 thread id 的舊版前綴
+- abort/：stack overflow abort（exit 134）的 Run 與 Submit 真實輸出
+  - 重產：bash tests/fixtures/sources/gen_abort.sh（需要 Docker）
+  - 原始碼：sources/abort/user.rs、sources/abort/tests.rs；以 docker exec 直接執行，與判題相同不經 shell
+- content/shared/timeline.rs：architecture §3.11 參考實作原文
+- content/levels/04-bridge-timeline：timeline 關卡，starter 兩隻分身反序上鎖必定死鎖，solution 依同一順序上鎖

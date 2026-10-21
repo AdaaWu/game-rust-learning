@@ -1,6 +1,8 @@
 #![allow(dead_code)]
 //! 測試共用：fixture 路徑、複製關卡、改寫檔案
 
+pub mod timeline;
+
 use std::fs;
 use std::path::{Path, PathBuf};
 

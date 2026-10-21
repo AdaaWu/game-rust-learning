@@ -1,0 +1,9 @@
+id = "04-bridge-timeline"
+chapter = 3
+order = 4
+title = "兩座窄橋"
+kind = "debug"
+visual = "timeline"
+story = "兩隻分身要一起過兩座窄橋。"
+concept = "## 鎖的順序\n\n- 每條執行緒依同一順序上鎖"
+hints = ["看時間軸誰在等誰"]
